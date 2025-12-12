@@ -1,0 +1,26 @@
+# macOS
+.DS_Store
+
+# Logs
+*.log
+
+# Node
+frontend/node_modules/
+backend/node_modules/
+
+# Build outputs
+frontend/dist/
+backend/dist/
+
+# Environment and secrets
+.env
+**/.env
+backend/.env
+
+# Database and uploads
+backend/prisma/dev.sqlite
+backend/uploads/
+
+# Vite/Cache
+.vite
+**/.vite

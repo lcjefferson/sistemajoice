@@ -1,0 +1,73 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String  @id @default(cuid())
+  name      String
+  email     String  @unique
+  password  String
+  role      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  measurements Measurement[]
+}
+
+model Institution {
+  id   String @id @default(cuid())
+  name String
+  sectors Sector[]
+  measurements Measurement[]
+}
+
+model Sector {
+  id             String @id @default(cuid())
+  name           String
+  institution    Institution @relation(fields: [institutionId], references: [id])
+  institutionId  String
+  measurements   Measurement[]
+}
+
+model Measurement {
+  id               String  @id @default(cuid())
+  date             DateTime
+  institution      Institution @relation(fields: [institutionId], references: [id])
+  institutionId    String
+  sector           Sector @relation(fields: [sectorId], references: [id])
+  sectorId         String
+  user             User @relation(fields: [userId], references: [id])
+  userId           String
+  humidity         Float
+  airSpeed         Float
+  temperature      Float
+  fungiInternal    Float
+  fungiExternal    Float
+  ieRatio          Float
+  aerodispersoids  Float
+  bacteriaInternal Float
+  bacteriaExternal Float
+  co2Internal      Float
+  co2External      Float
+  pm10             Float
+  pm25             Float
+  status           String
+  files            File[]
+  createdAt        DateTime @default(now())
+}
+
+model File {
+  id            String @id @default(cuid())
+  measurement   Measurement @relation(fields: [measurementId], references: [id])
+  measurementId String
+  name          String
+  path          String
+  mime          String
+  size          Int
+  category      String?
+  createdAt     DateTime @default(now())
+}
