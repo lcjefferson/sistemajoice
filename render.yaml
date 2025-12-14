@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: sistema-joice-backend
+    env: node
+    rootDir: backend
+    plan: starter
+    buildCommand: |
+      npm ci
+      npm run build
+      npx prisma generate
+    startCommand: npm run start
+    autoDeploy: true
+    disk:
+      name: backend-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: PORT
+        value: 4000
+      - key: DATABASE_URL
+        value: file:/var/data/dev.db
+      - key: JWT_SECRET
+        generateValue: true
+      - key: UPLOAD_DIR
+        value: /var/data/uploads
+
+  - type: static
+    name: sistema-joice-frontend
+    rootDir: frontend
+    buildCommand: |
+      npm ci
+      npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://sistema-joice-backend.onrender.com
