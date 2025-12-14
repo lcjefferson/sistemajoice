@@ -24,8 +24,9 @@ services:
       - key: UPLOAD_DIR
         value: /var/data/uploads
 
-  - type: static_site
+  - type: web
     name: sistema-joice-frontend
+    runtime: static
     rootDir: frontend
     buildCommand: |
       npm ci
