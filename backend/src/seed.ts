@@ -1,6 +1,6 @@
-import { prisma } from './db'
+import { prisma } from './db.js'
 import bcrypt from 'bcryptjs'
-import { computeStatus } from './utils/validation'
+import { computeStatus } from './utils/validation.js'
 
 async function run() {
   const email = 'admin@sistema.local'

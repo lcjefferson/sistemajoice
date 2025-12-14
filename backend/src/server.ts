@@ -2,12 +2,12 @@ import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import path from 'path'
-import authRouter from './web/auth'
-import usersRouter from './web/users'
-import institutionsRouter from './web/institutions'
-import sectorsRouter from './web/sectors'
-import measurementsRouter from './web/measurements'
-import { prisma } from './db'
+import authRouter from './web/auth.js'
+import usersRouter from './web/users.js'
+import institutionsRouter from './web/institutions.js'
+import sectorsRouter from './web/sectors.js'
+import measurementsRouter from './web/measurements.js'
+import { prisma } from './db.js'
 
 const app = express()
 app.use(cors({ origin: true, exposedHeaders: ['Content-Disposition'] }))

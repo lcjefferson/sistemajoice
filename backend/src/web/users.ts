@@ -1,7 +1,7 @@
 import { Router } from 'express'
-import { requireAuth, requireRole } from '../middleware/auth'
+import { requireAuth, requireRole } from '../middleware/auth.js'
 import bcrypt from 'bcryptjs'
-import { prisma } from '../db'
+import { prisma } from '../db.js'
 
 const router = Router()
 

@@ -1,12 +1,12 @@
 import { Router } from 'express'
-import { requireAuth } from '../middleware/auth'
-import { computeStatus } from '../utils/validation'
+import { requireAuth } from '../middleware/auth.js'
+import { computeStatus } from '../utils/validation.js'
 import multer from 'multer'
 import fs from 'fs'
 import path from 'path'
 import PDFDocument from 'pdfkit'
 import ExcelJS from 'exceljs'
-import { prisma } from '../db'
+import { prisma } from '../db.js'
 
 const router = Router()
 
