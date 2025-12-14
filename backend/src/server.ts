@@ -12,7 +12,8 @@ import { prisma } from './db'
 const app = express()
 app.use(cors({ origin: true, exposedHeaders: ['Content-Disposition'] }))
 app.use(express.json({ limit: '2mb' }))
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')))
+const uploadDir = process.env.UPLOAD_DIR ? String(process.env.UPLOAD_DIR) : path.join(process.cwd(), 'uploads')
+app.use('/uploads', express.static(uploadDir))
 
 app.use('/api/auth', authRouter)
 app.use('/api/users', usersRouter)

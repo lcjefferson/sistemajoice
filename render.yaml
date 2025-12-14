@@ -3,11 +3,11 @@ services:
     name: sistema-joice-backend
     env: node
     rootDir: backend
-    plan: starter
     buildCommand: |
       npm ci
       npm run build
       npx prisma generate
+    preDeployCommand: npx prisma migrate deploy
     startCommand: npm run start
     autoDeploy: true
     disk:
@@ -24,7 +24,7 @@ services:
       - key: UPLOAD_DIR
         value: /var/data/uploads
 
-  - type: static
+  - type: static_site
     name: sistema-joice-frontend
     rootDir: frontend
     buildCommand: |
@@ -33,4 +33,7 @@ services:
     staticPublishPath: dist
     envVars:
       - key: VITE_API_URL
-        value: https://sistema-joice-backend.onrender.com
+        fromService:
+          name: sistema-joice-backend
+          type: web
+          property: url
