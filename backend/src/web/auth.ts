@@ -20,7 +20,8 @@ router.post('/login', async (req, res) => {
   if (!user) return res.status(401).json({ message: 'Credenciais inválidas' })
   const ok = await bcrypt.compare(password, user.password)
   if (!ok) return res.status(401).json({ message: 'Credenciais inválidas' })
-  const secret = process.env.JWT_SECRET!
+  const secret = process.env.JWT_SECRET
+  if (!secret) return res.status(500).json({ message: 'Configuração ausente de JWT' })
   const token = jwt.sign({ sub: user.id, name: user.name, role: user.role }, secret, { expiresIn: '12h' })
   res.json({ token })
 })

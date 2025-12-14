@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import express from 'express'
+import express, { Request, Response, NextFunction } from 'express'
 import cors from 'cors'
 import path from 'path'
 import authRouter from './web/auth.js'
@@ -22,6 +22,11 @@ app.use('/api/sectors', sectorsRouter)
 app.use('/api/measurements', measurementsRouter)
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }))
+
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  console.error(err)
+  res.status(500).json({ message: 'Erro interno' })
+})
 
 const port = process.env.PORT ? Number(process.env.PORT) : 4000
 app.listen(port, () => {
