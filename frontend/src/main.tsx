@@ -5,7 +5,7 @@ import App from './App'
 import { AuthProvider } from './modules/auth/AuthContext'
 import { ThemeProvider } from '@mui/material/styles'
 import { theme } from './shared/theme'
-import './i18n'
+import './i18n-config'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

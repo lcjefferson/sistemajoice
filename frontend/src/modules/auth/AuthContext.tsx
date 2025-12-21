@@ -38,7 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser({ id: decoded.sub, name: decoded.name, role: decoded.role })
     
     if (lang) {
-      import('../../i18n').then(({ default: i18n }) => {
+      import('../../i18n-config').then(({ default: i18n }) => {
         i18n.changeLanguage(lang)
       })
     }
