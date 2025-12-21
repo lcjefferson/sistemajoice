@@ -4,8 +4,10 @@ import { prisma } from '../db.js'
 
 const router = Router()
 
-router.get('/', requireAuth, async (_req, res) => {
-  const items = await prisma.institution.findMany({ orderBy: { name: 'asc' } })
+router.get('/', requireAuth, async (req, res) => {
+  const { q } = req.query
+  const where = q ? { name: { contains: String(q) } } : {}
+  const items = await prisma.institution.findMany({ where, orderBy: { name: 'asc' } })
   res.json({ items })
 })
 

@@ -7,6 +7,7 @@ import usersRouter from './web/users.js'
 import institutionsRouter from './web/institutions.js'
 import sectorsRouter from './web/sectors.js'
 import measurementsRouter from './web/measurements.js'
+import contactRouter from './web/contact.js'
 import { prisma } from './db.js'
 
 const app = express()
@@ -20,6 +21,7 @@ app.use('/api/users', usersRouter)
 app.use('/api/institutions', institutionsRouter)
 app.use('/api/sectors', sectorsRouter)
 app.use('/api/measurements', measurementsRouter)
+app.use('/api/contact', contactRouter)
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }))
 

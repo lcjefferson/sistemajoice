@@ -5,8 +5,10 @@ import { prisma } from '../db.js'
 const router = Router()
 
 router.get('/', requireAuth, async (req, res) => {
-  const { institutionId } = req.query
-  const where = institutionId ? { institutionId: String(institutionId) } : {}
+  const { institutionId, q } = req.query
+  const where: any = {}
+  if (institutionId) where.institutionId = String(institutionId)
+  if (q) where.name = { contains: String(q) }
   const items = await prisma.sector.findMany({ where, orderBy: { name: 'asc' } })
   res.json({ items })
 })
