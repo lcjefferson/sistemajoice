@@ -2,6 +2,7 @@ import 'dotenv/config'
 import express, { Request, Response, NextFunction } from 'express'
 import cors from 'cors'
 import path from 'path'
+import fs from 'fs'
 import authRouter from './web/auth.js'
 import usersRouter from './web/users.js'
 import institutionsRouter from './web/institutions.js'
@@ -11,9 +12,14 @@ import contactRouter from './web/contact.js'
 import { prisma } from './db.js'
 
 const app = express()
-app.use(cors({ origin: true, exposedHeaders: ['Content-Disposition'] }))
+app.use(cors({ origin: true, credentials: true, exposedHeaders: ['Content-Disposition'] }))
 app.use(express.json({ limit: '2mb' }))
 const uploadDir = process.env.UPLOAD_DIR ? String(process.env.UPLOAD_DIR) : path.join(process.cwd(), 'uploads')
+
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true })
+}
+
 app.use('/uploads', express.static(uploadDir))
 
 app.use('/api/auth', authRouter)
@@ -31,6 +37,6 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 })
 
 const port = process.env.PORT ? Number(process.env.PORT) : 4000
-app.listen(port, () => {
-  console.log(`API on http://localhost:${port}`)
+app.listen(port, '0.0.0.0', () => {
+  console.log(`API on http://0.0.0.0:${port}`)
 })
