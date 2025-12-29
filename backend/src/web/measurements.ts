@@ -172,7 +172,8 @@ router.get('/report', requireAuth, async (req, res) => {
     const wb = new ExcelJS.Workbook()
     const ws = wb.addWorksheet('Medições')
     ws.addRow([
-      'Data',
+      'ID',
+      'Data/Hora',
       'Instituição',
       'Setor',
       'Temp (°C)',
@@ -183,10 +184,12 @@ router.get('/report', requireAuth, async (req, res) => {
       'Bactérias Int',
       'Status',
       'Latitude',
-      'Longitude'
+      'Longitude',
+      'Comentários'
     ])
     for (const i of items)
       ws.addRow([
+        i.id,
         i.date.toISOString(),
         i.institution?.name ?? i.institutionId,
         i.sector?.name ?? i.sectorId,
@@ -198,7 +201,8 @@ router.get('/report', requireAuth, async (req, res) => {
         i.bacteriaInternal,
         i.status,
         i.latitude,
-        i.longitude
+        i.longitude,
+        (i as any).comments || ''
       ])
     const buf = await wb.xlsx.writeBuffer()
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -206,7 +210,7 @@ router.get('/report', requireAuth, async (req, res) => {
     return res.send(Buffer.from(buf))
   }
 
-  const doc = new PDFDocument({ margin: 30, size: 'A4', layout: 'landscape' })
+  const doc = new PDFDocument({ margin: 20, size: 'A4', layout: 'landscape' })
   const chunks: Buffer[] = []
   doc.on('data', (c: Buffer) => chunks.push(c))
   doc.on('end', () => {
@@ -225,41 +229,42 @@ router.get('/report', requireAuth, async (req, res) => {
   const drawHeader = () => {
     if (fs.existsSync(logoPath)) {
       try {
-        doc.image(logoPath, 30, 20, { height: 40 })
+        doc.image(logoPath, 20, 20, { height: 30 })
       } catch (e) {
         console.error('Erro ao carregar logo:', e)
       }
     }
-    doc.fontSize(18).text('Relatório de Medições', 0, 35, { align: 'center' })
+    doc.fontSize(16).text('Relatório de Medições', 0, 30, { align: 'center' })
   }
 
   const drawFooter = () => {
-    const bottom = doc.page.height - 40
+    const bottom = doc.page.height - 30
     doc.fontSize(8)
     doc.text(
       `${systemName} - ${slogan} | Gerado em: ${new Date().toLocaleString('pt-BR')}`,
-      30,
+      20,
       bottom,
-      { align: 'center', width: doc.page.width - 60 }
+      { align: 'center', width: doc.page.width - 40 }
     )
   }
 
   const headers = [
-    'Data', 'Instituição', 'Setor', 'Temp', 'Umid',
-    'Fungos Int', 'Fungos Ext', 'Rel I/E', 'Bact Int', 'Status', 'Coord'
+    'ID', 'Data', 'Inst', 'Setor', 'Temp', 'Umid',
+    'F.Int', 'F.Ext', 'I/E', 'B.Int', 'Status', 'Coord', 'Obs'
   ]
-  const widths = [60, 100, 90, 40, 40, 60, 60, 50, 60, 70, 100] // Total 730
-  const startX = 30
-  let y = 100
+  // Adjusted widths to fit A4 Landscape (~800 usable width)
+  const widths = [40, 55, 80, 70, 35, 35, 40, 40, 35, 40, 60, 90, 100] 
+  const startX = 20
+  let y = 80
 
   const drawTableHead = () => {
-    doc.fontSize(9).font('Helvetica-Bold')
+    doc.fontSize(8).font('Helvetica-Bold')
     let x = startX
     headers.forEach((h, i) => {
       doc.text(h, x, y, { width: widths[i], align: 'left' })
       x += widths[i]
     })
-    y += 20
+    y += 15
     doc.moveTo(startX, y - 5).lineTo(startX + widths.reduce((a, b) => a + b, 0), y - 5).stroke()
     doc.font('Helvetica')
   }
@@ -269,23 +274,26 @@ router.get('/report', requireAuth, async (req, res) => {
   drawFooter()
 
   for (const i of items) {
-    if (y > doc.page.height - 60) {
+    if (y > doc.page.height - 50) {
       doc.addPage()
       pageNumber++
-      y = 100
+      y = 80
       drawHeader()
       drawTableHead()
       drawFooter()
     }
 
-    const nmI = i.institution?.name ?? i.institutionId
-    const nmS = i.sector?.name ?? i.sectorId
+    const nmI = (i.institution?.name ?? i.institutionId).substring(0, 15)
+    const nmS = (i.sector?.name ?? i.sectorId).substring(0, 15)
     const d = i.date
     const pp = (n: number) => String(n).padStart(2, '0')
     const s = `${pp(d.getDate())}/${pp(d.getMonth() + 1)}/${d.getFullYear()}`
-    const coord = i.latitude && i.longitude ? `${i.latitude.toFixed(4)}, ${i.longitude.toFixed(4)}` : '-'
+    const coord = i.latitude && i.longitude ? `${i.latitude.toFixed(3)}, ${i.longitude.toFixed(3)}` : '-'
+    const obs = ((i as any).comments || '').substring(0, 20)
+    const idShort = i.id.slice(-6).toUpperCase()
 
     const row = [
+      idShort,
       s,
       nmI,
       nmS,
@@ -296,16 +304,17 @@ router.get('/report', requireAuth, async (req, res) => {
       String(i.ieRatio),
       String(i.bacteriaInternal),
       i.status,
-      coord
+      coord,
+      obs
     ]
 
-    doc.fontSize(8)
+    doc.fontSize(7)
     let x = startX
     row.forEach((cell, idx) => {
       doc.text(cell, x, y, { width: widths[idx], align: 'left' })
       x += widths[idx]
     })
-    y += 15
+    y += 12
   }
 
   doc.end()
@@ -427,7 +436,9 @@ router.get('/:id/report', requireAuth, async (req, res) => {
     ['CO2 Externo (ppm)', String(m.co2External)],
     ['PM10 (ug/m3)', String(m.pm10)],
     ['PM2.5 (ug/m3)', String(m.pm25)],
-    ['Localização', coord]
+    ['Localização', coord],
+    ['ID', m.id],
+    ['Comentários', (m as any).comments || '-']
   ]
 
   // Configuração da tabela

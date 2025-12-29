@@ -12,6 +12,9 @@
     "prisma": "prisma",
     "seed": "tsx src/seed.ts"
   },
+  "prisma": {
+    "seed": "tsx src/seed.ts"
+  },
   "dependencies": {
     "@prisma/client": "^5.22.0",
     "bcryptjs": "^2.4.3",

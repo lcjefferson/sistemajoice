@@ -59,6 +59,7 @@ model Measurement {
   status           String
   latitude         Float?
   longitude        Float?
+  comments         String?
   files            File[]
   createdAt        DateTime @default(now())
 }

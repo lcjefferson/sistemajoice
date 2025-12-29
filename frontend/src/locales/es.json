@@ -67,7 +67,8 @@
     "get_location": "Obtener Ubicación",
     "location_error": "Error al obtener ubicación",
     "search": "Buscar",
-    "status": "Estado"
+    "status": "Estado",
+    "comments": "Comentarios"
   },
   "dashboard": {
     "title": "Panel",
@@ -78,6 +79,9 @@
     "temperature": "Temperatura",
     "humidity": "Humedad",
     "summary": "Resumen",
+    "compliance_status": "Estado de Cumplimiento",
+    "non_compliance_by_parameter": "No Conformidades por Parámetro",
+    "occurrences": "Ocurrencias",
     "institutions": "Instituciones",
     "sectors": "Sectores"
   },

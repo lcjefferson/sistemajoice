@@ -25,6 +25,7 @@ type Measurement = {
   status: 'Conforme' | 'Não Conforme'
   latitude?: number
   longitude?: number
+  comments?: string
   institution?: Institution
   sector?: Sector
   files?: Attachment[]
@@ -160,7 +161,10 @@ export default function MeasurementsPage() {
         {items.map(m => (
           <Box key={m.id} sx={{ py:2, borderBottom:'1px solid #eee' }}>
             <Box sx={{ display:'flex', justifyContent:'space-between', alignItems:{ xs: 'flex-start', sm: 'center' }, flexDirection:{ xs: 'column', sm: 'row' } }}>
-              <Typography sx={{ color: 'text.primary' }}>{format(new Date(m.date), 'dd/MM/yyyy | HH:mm')} | {m.institution?.name || m.institutionId} {'>'} {m.sector?.name || m.sectorId} | {m.status === 'Conforme' ? t('measurements.status_compliant') : t('measurements.status_non_compliant')}</Typography>
+              <Typography sx={{ color: 'text.primary' }}>
+                <Typography component="span" sx={{ fontWeight: 'bold', mr: 1, color: 'primary.main' }}>#{m.id.slice(-6).toUpperCase()}</Typography>
+                {format(new Date(m.date), 'dd/MM/yyyy | HH:mm')} | {m.institution?.name || m.institutionId} {'>'} {m.sector?.name || m.sectorId} | {m.status === 'Conforme' ? t('measurements.status_compliant') : t('measurements.status_non_compliant')}
+              </Typography>
               <Box sx={{ display:'flex', gap:1, flexWrap:'wrap', mt:{ xs: 1, sm: 0 } }}>
                 <Button sx={{ width:{ xs:'100%', sm:'auto' } }} onClick={() => { setForm({ ...m, date: m.date.slice(0,10) }); setFormTime(m.date.slice(11,16)); setOpen(true) }}>{t('common.edit')}</Button>
                 <Button sx={{ width:{ xs:'100%', sm:'auto' } }} onClick={() => downloadOne(m.id)}>{t('common.pdf')}</Button>
@@ -222,6 +226,7 @@ export default function MeasurementsPage() {
             <TextField label={t('common.longitude')} type="number" value={form.longitude || ''} onChange={e=>setForm({ ...form, longitude: parseFloat(e.target.value) })} sx={{ width: 150 }} />
             <Button variant="outlined" onClick={handleGetLocation}>{t('common.get_location')}</Button>
           </Box>
+          <TextField label={t('common.comments')} multiline rows={3} fullWidth sx={{ mt:2 }} value={form.comments||''} onChange={e=>setForm({ ...form, comments: e.target.value })} />
           <Box sx={{ mt:3 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>{t('common.attachments')}</Typography>
             <Box sx={{ display:'grid', gap:2, mt:1, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' } }}>

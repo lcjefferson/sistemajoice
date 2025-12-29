@@ -67,7 +67,8 @@
     "get_location": "Get Location",
     "location_error": "Error getting location",
     "search": "Search",
-    "status": "Status"
+    "status": "Status",
+    "comments": "Comments"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -78,6 +79,9 @@
     "temperature": "Temperature",
     "humidity": "Humidity",
     "summary": "Summary",
+    "compliance_status": "Compliance Status",
+    "non_compliance_by_parameter": "Non-Conformities by Parameter",
+    "occurrences": "Occurrences",
     "institutions": "Institutions",
     "sectors": "Sectors"
   },

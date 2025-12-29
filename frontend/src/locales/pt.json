@@ -67,17 +67,21 @@
     "get_location": "Obter Localização",
     "location_error": "Erro ao obter localização",
     "search": "Pesquisar",
-    "status": "Status"
+    "status": "Status",
+    "comments": "Comentários"
   },
   "dashboard": {
     "title": "Dashboard",
     "avg_temp": "Média Temp",
     "avg_humidity": "Média Umidade",
-    "compliant": "Conformes",
     "non_compliant": "Não Conformes",
     "temperature": "Temperatura",
     "humidity": "Umidade",
     "summary": "Resumo",
+    "compliance_status": "Status de Conformidade",
+    "non_compliance_by_parameter": "Não Conformidades por Parâmetro",
+    "occurrences": "Ocorrências",
+    "compliant": "Conforme",
     "institutions": "Instituições",
     "sectors": "Setores"
   },

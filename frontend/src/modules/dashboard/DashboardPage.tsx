@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Box, Paper, Typography, Grid, FormControl, InputLabel, Select, MenuItem, TextField, Button, Card, CardContent, Chip } from '@mui/material'
-import { Line, Pie } from 'react-chartjs-2'
+import { Line, Pie, Bar } from 'react-chartjs-2'
 import { api } from '../../shared/api'
 import { Chart, CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Tooltip, Legend } from 'chart.js'
 import { useTranslation } from 'react-i18next'
@@ -10,19 +10,19 @@ Chart.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement
 type Option = { id: string; name: string }
 
 const PARAMETERS = [
-  { key: 'temperature', labelKey: 'measurements.temperature_label' },
-  { key: 'humidity', labelKey: 'measurements.humidity_label' },
-  { key: 'airSpeed', labelKey: 'measurements.air_speed_label' },
-  { key: 'fungiInternal', labelKey: 'measurements.fungi_internal_label' },
-  { key: 'fungiExternal', labelKey: 'measurements.fungi_external_label' },
-  { key: 'ieRatio', labelKey: 'measurements.ie_ratio_label' },
-  { key: 'aerodispersoids', labelKey: 'measurements.aerodispersoids_label' },
-  { key: 'bacteriaInternal', labelKey: 'measurements.bacteria_internal_label' },
-  { key: 'bacteriaExternal', labelKey: 'measurements.bacteria_external_label' },
-  { key: 'co2Internal', labelKey: 'measurements.co2_internal_label' },
-  { key: 'co2External', labelKey: 'measurements.co2_external_label' },
-  { key: 'pm10', labelKey: 'measurements.pm10_label' },
-  { key: 'pm25', labelKey: 'measurements.pm25_label' }
+  { key: 'temperature', labelKey: 'measurements.temperature_label', type: 'line', color: '#f44336' },
+  { key: 'humidity', labelKey: 'measurements.humidity_label', type: 'line', color: '#2196f3' },
+  { key: 'airSpeed', labelKey: 'measurements.air_speed_label', type: 'line', color: '#00bcd4' },
+  { key: 'fungiInternal', labelKey: 'measurements.fungi_internal_label', type: 'bar', color: '#4caf50' },
+  { key: 'fungiExternal', labelKey: 'measurements.fungi_external_label', type: 'bar', color: '#8bc34a' },
+  { key: 'ieRatio', labelKey: 'measurements.ie_ratio_label', type: 'line', color: '#ff9800' },
+  { key: 'aerodispersoids', labelKey: 'measurements.aerodispersoids_label', type: 'bar', color: '#9c27b0' },
+  { key: 'bacteriaInternal', labelKey: 'measurements.bacteria_internal_label', type: 'bar', color: '#673ab7' },
+  { key: 'bacteriaExternal', labelKey: 'measurements.bacteria_external_label', type: 'bar', color: '#3f51b5' },
+  { key: 'co2Internal', labelKey: 'measurements.co2_internal_label', type: 'line', color: '#795548' },
+  { key: 'co2External', labelKey: 'measurements.co2_external_label', type: 'line', color: '#607d8b' },
+  { key: 'pm10', labelKey: 'measurements.pm10_label', type: 'bar', color: '#e91e63' },
+  { key: 'pm25', labelKey: 'measurements.pm25_label', type: 'bar', color: '#9e9e9e' }
 ]
 
 export default function DashboardPage() {
@@ -137,55 +137,102 @@ export default function DashboardPage() {
                     </Box>
                     <Typography variant="h4" sx={{ mb: 2 }}>{avg?.toFixed(2) || '-'}</Typography>
                     <Box sx={{ flexGrow: 1, minHeight: 150 }}>
-                      <Line 
-                        data={{ 
-                          labels: series.map(s => s.date), 
-                          datasets: [{ 
-                            label: t(p.labelKey), 
-                            data: series.map(s => s[p.key]), 
-                            borderColor: '#1976d2', 
-                            tension: 0.3,
-                            pointRadius: 0
-                          }] 
-                        }} 
-                        options={{ 
-                          responsive: true, 
-                          maintainAspectRatio: false,
-                          plugins: { legend: { display: false } }, 
-                          scales: { 
-                            x: { display: false }, 
-                            y: { display: true, ticks: { count: 5 } } 
-                          } 
-                        }} 
-                      />
+                      {p.type === 'bar' ? (
+                        <Bar 
+                          data={{ 
+                            labels: series.map(s => s.date), 
+                            datasets: [{ 
+                              label: t(p.labelKey), 
+                              data: series.map(s => s[p.key]), 
+                              backgroundColor: p.color || '#1976d2'
+                            }] 
+                          }} 
+                          options={{ 
+                            responsive: true, 
+                            maintainAspectRatio: false,
+                            plugins: { legend: { display: false } }, 
+                            scales: { 
+                              x: { display: false }, 
+                              y: { display: true, ticks: { count: 5 } } 
+                            } 
+                          }} 
+                        />
+                      ) : (
+                        <Line 
+                          data={{ 
+                            labels: series.map(s => s.date), 
+                            datasets: [{ 
+                              label: t(p.labelKey), 
+                              data: series.map(s => s[p.key]), 
+                              borderColor: p.color || '#1976d2', 
+                              tension: 0.3,
+                              pointRadius: 0
+                            }] 
+                          }} 
+                          options={{ 
+                            responsive: true, 
+                            maintainAspectRatio: false,
+                            plugins: { legend: { display: false } }, 
+                            scales: { 
+                              x: { display: false }, 
+                              y: { display: true, ticks: { count: 5 } } 
+                            } 
+                          }} 
+                        />
+                      )}
                     </Box>
                   </Paper>
                 </Grid>
               )
             })}
+            <Grid item xs={12} md={12} lg={8}>
+              <Paper sx={{ p: 2, height: '100%' }}>
+                <Typography variant="h6" gutterBottom>{t('dashboard.compliance_status')}</Typography>
+                <Grid container spacing={2} alignItems="center" sx={{ height: '100%' }}>
+                  <Grid item xs={12} md={6}>
+                    <Box sx={{ height: 300, display: 'flex', justifyContent: 'center' }}>
+                      <Pie 
+                        data={{ 
+                          labels: [t('dashboard.compliant'), t('dashboard.non_compliant')],
+                          datasets: [{ 
+                            data: [kpis.compliantCount, kpis.nonCompliantCount],
+                            backgroundColor: ['#4caf50', '#f44336']
+                          }] 
+                        }}
+                        options={{ 
+                          maintainAspectRatio: false,
+                          plugins: { legend: { display: false } }
+                        }}
+                      />
+                    </Box>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}>
+                      <Paper variant="outlined" sx={{ p: 2, borderLeft: '6px solid #4caf50' }}>
+                        <Typography variant="subtitle2" color="text.secondary">{t('dashboard.compliant')}</Typography>
+                        <Typography variant="h4">{kpis.compliantCount}</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {((kpis.compliantCount / (kpis.compliantCount + kpis.nonCompliantCount || 1)) * 100).toFixed(1)}%
+                        </Typography>
+                      </Paper>
+                      <Paper variant="outlined" sx={{ p: 2, borderLeft: '6px solid #f44336' }}>
+                        <Typography variant="subtitle2" color="text.secondary">{t('dashboard.non_compliant')}</Typography>
+                        <Typography variant="h4">{kpis.nonCompliantCount}</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {((kpis.nonCompliantCount / (kpis.compliantCount + kpis.nonCompliantCount || 1)) * 100).toFixed(1)}%
+                        </Typography>
+                      </Paper>
+                      <Paper variant="outlined" sx={{ p: 2, borderLeft: '6px solid #1976d2' }}>
+                        <Typography variant="subtitle2" color="text.secondary">{t('dashboard.occurrences')}</Typography>
+                        <Typography variant="h4">{kpis.compliantCount + kpis.nonCompliantCount}</Typography>
+                      </Paper>
+                    </Box>
+                  </Grid>
+                </Grid>
+              </Paper>
+            </Grid>
           </Grid>
         </>
-      )}
-      
-      {kpis && (
-        <Grid container spacing={2} sx={{ mt: 2 }}>
-          <Grid item xs={12} md={6}><Paper sx={{ p:2 }}><Typography variant="h6" sx={{ mb:2 }}>{t('dashboard.summary')}</Typography><Pie data={{ labels: [t('dashboard.compliant'),t('dashboard.non_compliant')], datasets: [{ data: [kpis?.compliantCount||0, kpis?.nonCompliantCount||0], backgroundColor: ['#4caf50','#f44336'] }] }} options={{ plugins:{ legend:{ labels:{ color:'#111111' } } } }} /></Paper></Grid>
-          <Grid item xs={12} md={6}>
-            <Paper sx={{ p:2 }}>
-              <Typography variant="h6" sx={{ mb: 1 }}>{t('dashboard.summary')}</Typography>
-              <Grid container spacing={2} sx={{ mb: 2 }}>
-                <Grid item xs={6}><Card variant="outlined"><CardContent><Typography variant="caption">{t('dashboard.institutions')}</Typography><Typography variant="h5">{institutions.length}</Typography></CardContent></Card></Grid>
-                <Grid item xs={6}><Card variant="outlined"><CardContent><Typography variant="caption">{t('dashboard.sectors')}</Typography><Typography variant="h5">{sectors.length}</Typography></CardContent></Card></Grid>
-              </Grid>
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>{t('dashboard.institutions')}</Typography>
-              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr', gap: 0.5, maxHeight: 220, overflowY: 'auto' }}>
-                {institutions.slice(0, 10).map(i => (
-                  <Typography key={i.id} variant="body2" sx={{ color: 'text.primary' }}>• {i.name}</Typography>
-                ))}
-              </Box>
-            </Paper>
-          </Grid>
-        </Grid>
       )}
     </Box>
   )
