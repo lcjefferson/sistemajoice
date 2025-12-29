@@ -10,17 +10,17 @@ Chart.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement
 type Option = { id: string; name: string }
 
 const PARAMETERS = [
-  { key: 'temperature', labelKey: 'measurements.temperature_label', type: 'line', color: '#f44336' },
-  { key: 'humidity', labelKey: 'measurements.humidity_label', type: 'line', color: '#2196f3' },
-  { key: 'airSpeed', labelKey: 'measurements.air_speed_label', type: 'line', color: '#00bcd4' },
+  { key: 'temperature', labelKey: 'measurements.temperature_label', type: 'bar', color: '#f44336' },
+  { key: 'humidity', labelKey: 'measurements.humidity_label', type: 'bar', color: '#2196f3' },
+  { key: 'airSpeed', labelKey: 'measurements.air_speed_label', type: 'bar', color: '#00bcd4' },
   { key: 'fungiInternal', labelKey: 'measurements.fungi_internal_label', type: 'bar', color: '#4caf50' },
   { key: 'fungiExternal', labelKey: 'measurements.fungi_external_label', type: 'bar', color: '#8bc34a' },
-  { key: 'ieRatio', labelKey: 'measurements.ie_ratio_label', type: 'line', color: '#ff9800' },
+  { key: 'ieRatio', labelKey: 'measurements.ie_ratio_label', type: 'bar', color: '#ff9800' },
   { key: 'aerodispersoids', labelKey: 'measurements.aerodispersoids_label', type: 'bar', color: '#9c27b0' },
   { key: 'bacteriaInternal', labelKey: 'measurements.bacteria_internal_label', type: 'bar', color: '#673ab7' },
   { key: 'bacteriaExternal', labelKey: 'measurements.bacteria_external_label', type: 'bar', color: '#3f51b5' },
-  { key: 'co2Internal', labelKey: 'measurements.co2_internal_label', type: 'line', color: '#795548' },
-  { key: 'co2External', labelKey: 'measurements.co2_external_label', type: 'line', color: '#607d8b' },
+  { key: 'co2Internal', labelKey: 'measurements.co2_internal_label', type: 'bar', color: '#795548' },
+  { key: 'co2External', labelKey: 'measurements.co2_external_label', type: 'bar', color: '#607d8b' },
   { key: 'pm10', labelKey: 'measurements.pm10_label', type: 'bar', color: '#e91e63' },
   { key: 'pm25', labelKey: 'measurements.pm25_label', type: 'bar', color: '#9e9e9e' }
 ]
@@ -166,7 +166,8 @@ export default function DashboardPage() {
                               data: series.map(s => s[p.key]), 
                               borderColor: p.color || '#1976d2', 
                               tension: 0.3,
-                              pointRadius: 0
+                              pointRadius: 3,
+                              pointHoverRadius: 5
                             }] 
                           }} 
                           options={{ 

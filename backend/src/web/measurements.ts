@@ -249,16 +249,16 @@ router.get('/report', requireAuth, async (req, res) => {
   }
 
   const headers = [
-    'ID', 'Data', 'Inst', 'Setor', 'Temp', 'Umid',
-    'F.Int', 'F.Ext', 'I/E', 'B.Int', 'Status', 'Coord', 'Obs'
+    'ID', 'Data', 'Inst', 'Setor', 'Temp', 'Umid', 'Vel.Ar',
+    'F.Int', 'F.Ext', 'I/E', 'Aerod', 'B.Int', 'B.Ext', 'CO2.I', 'CO2.E', 'PM10', 'PM2.5', 'Status', 'Coord', 'Obs'
   ]
   // Adjusted widths to fit A4 Landscape (~800 usable width)
-  const widths = [40, 55, 80, 70, 35, 35, 40, 40, 35, 40, 60, 90, 100] 
+  const widths = [35, 50, 60, 60, 30, 30, 30, 30, 30, 30, 30, 30, 30, 35, 35, 30, 30, 50, 70, 75] 
   const startX = 20
   let y = 80
 
   const drawTableHead = () => {
-    doc.fontSize(8).font('Helvetica-Bold')
+    doc.fontSize(7).font('Helvetica-Bold')
     let x = startX
     headers.forEach((h, i) => {
       doc.text(h, x, y, { width: widths[i], align: 'left' })
@@ -299,16 +299,23 @@ router.get('/report', requireAuth, async (req, res) => {
       nmS,
       String(i.temperature),
       String(i.humidity),
+      String(i.airSpeed),
       String(i.fungiInternal),
       String(i.fungiExternal),
       String(i.ieRatio),
+      String(i.aerodispersoids),
       String(i.bacteriaInternal),
+      String(i.bacteriaExternal),
+      String(i.co2Internal),
+      String(i.co2External),
+      String(i.pm10),
+      String(i.pm25),
       i.status,
       coord,
       obs
     ]
 
-    doc.fontSize(7)
+    doc.fontSize(6)
     let x = startX
     row.forEach((cell, idx) => {
       doc.text(cell, x, y, { width: widths[idx], align: 'left' })
@@ -324,7 +331,7 @@ router.get('/:id/report', requireAuth, async (req, res) => {
   const { id } = req.params
   const m = await prisma.measurement.findUnique({
     where: { id },
-    include: { institution: true, sector: true, user: true }
+    include: { institution: true, sector: true, user: true, files: true }
   })
   if (!m) return res.status(404).json({ message: 'Medição não encontrada' })
   const doc = new PDFDocument({ 
@@ -479,6 +486,36 @@ router.get('/:id/report', requireAuth, async (req, res) => {
       doc.y = 110 // Reset Y após header
     }
   })
+
+  // Anexos
+  if (m.files && m.files.length > 0) {
+    doc.moveDown(2)
+    
+    // Check page break for attachments header
+    if (doc.y > doc.page.height - 100) {
+      doc.addPage()
+      doc.y = 110
+    }
+
+    doc.fontSize(12).fillColor('black').font('Helvetica-Bold').text('Anexos')
+    doc.moveDown(0.5)
+    doc.font('Helvetica').fontSize(10)
+    
+    const baseUrl = `${req.protocol}://${req.get('host')}`
+    
+    m.files.forEach(f => {
+      // Check page break for each file
+      if (doc.y > doc.page.height - 50) {
+        doc.addPage()
+        doc.y = 110
+      }
+      
+      const fileUrl = `${baseUrl}${f.path}`
+      doc.fillColor('blue')
+         .text(f.name, { link: fileUrl, underline: true })
+         .fillColor('black') // Reset color
+    })
+  }
 
   doc.end()
 })
