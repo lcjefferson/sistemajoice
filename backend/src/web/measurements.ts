@@ -105,16 +105,19 @@ router.get('/bi', requireAuth, async (req, res) => {
   if (status === 'Não Conforme') {
     items = items.map(m => {
       const newItem = { ...m }
+      const bacteriaRatio = m.bacteriaExternal === 0 ? 0 : m.bacteriaInternal / m.bacteriaExternal
+      
       if (m.temperature >= limits.temperatureMin && m.temperature <= limits.temperatureMax) newItem.temperature = 0
       if (m.humidity >= limits.humidityMin && m.humidity <= limits.humidityMax) newItem.humidity = 0
-      if (m.airSpeed <= limits.airSpeed) newItem.airSpeed = 0
-      if (m.fungiInternal <= limits.fungiInternal) { newItem.fungiInternal = 0; newItem.fungiExternal = 0 }
-      if (m.ieRatio <= limits.ieMax) newItem.ieRatio = 0
-      if (m.aerodispersoids <= limits.aerodispersoids) newItem.aerodispersoids = 0
-      if (m.bacteriaInternal <= limits.bacteriaInternal) { newItem.bacteriaInternal = 0; newItem.bacteriaExternal = 0 }
-      if ((m.co2Internal - m.co2External) <= 700 && m.co2Internal <= limits.co2) { newItem.co2Internal = 0; newItem.co2External = 0 }
+      if (m.fungiInternal < limits.fungiInternal && m.ieRatio <= limits.ieMax) { newItem.fungiInternal = 0; newItem.fungiExternal = 0; newItem.ieRatio = 0 }
+      if (m.bacteriaInternal < limits.bacteriaInternal && bacteriaRatio <= limits.ieMax) { newItem.bacteriaInternal = 0; newItem.bacteriaExternal = 0 }
+      if ((m.co2Internal - m.co2External) <= 700) { newItem.co2Internal = 0; newItem.co2External = 0 }
       if (m.pm10 <= limits.pm10) newItem.pm10 = 0
       if (m.pm25 <= limits.pm25) newItem.pm25 = 0
+      
+      // Air speed is not a compliance indicator in the thesis Status_Geral
+      newItem.airSpeed = 0
+      
       return newItem
     })
   }
@@ -126,7 +129,6 @@ router.get('/bi', requireAuth, async (req, res) => {
     fungiInternalAvg: avg(items.map(i => i.fungiInternal)),
     fungiExternalAvg: avg(items.map(i => i.fungiExternal)),
     ieRatioAvg: avg(items.map(i => i.ieRatio)),
-    aerodispersoidsAvg: avg(items.map(i => i.aerodispersoids)),
     bacteriaInternalAvg: avg(items.map(i => i.bacteriaInternal)),
     bacteriaExternalAvg: avg(items.map(i => i.bacteriaExternal)),
     co2InternalAvg: avg(items.map(i => i.co2Internal)),
@@ -144,7 +146,6 @@ router.get('/bi', requireAuth, async (req, res) => {
     fungiInternal: i.fungiInternal,
     fungiExternal: i.fungiExternal,
     ieRatio: i.ieRatio,
-    aerodispersoids: i.aerodispersoids,
     bacteriaInternal: i.bacteriaInternal,
     bacteriaExternal: i.bacteriaExternal,
     co2Internal: i.co2Internal,
@@ -158,8 +159,8 @@ router.get('/bi', requireAuth, async (req, res) => {
 router.get('/report', requireAuth, async (req, res) => {
   const { format = 'pdf', institutionId, sectorId, from, to, limit } = req.query as any
   const where: any = {}
-  if (institutionId) where.institutionId = String(institutionId)
-  if (sectorId) where.sectorId = String(sectorId)
+  if (institutionId && String(institutionId).trim()) where.institutionId = String(institutionId).trim()
+  if (sectorId && String(sectorId).trim()) where.sectorId = String(sectorId).trim()
   if (from || to) where.date = { gte: from ? new Date(from) : undefined, lte: to ? new Date(to) : undefined }
   const take = Math.min(Number(limit || 500), 2000)
   const items = await prisma.measurement.findMany({
@@ -182,6 +183,11 @@ router.get('/report', requireAuth, async (req, res) => {
       'Fungos Ext',
       'Relação I/E',
       'Bactérias Int',
+      'Bactérias Ext',
+      'CO2 Int',
+      'CO2 Ext',
+      'PM10',
+      'PM2.5',
       'Status',
       'Latitude',
       'Longitude',
@@ -199,6 +205,11 @@ router.get('/report', requireAuth, async (req, res) => {
         i.fungiExternal,
         i.ieRatio,
         i.bacteriaInternal,
+        i.bacteriaExternal,
+        i.co2Internal,
+        i.co2External,
+        i.pm10,
+        i.pm25,
         i.status,
         i.latitude,
         i.longitude,
@@ -250,10 +261,10 @@ router.get('/report', requireAuth, async (req, res) => {
 
   const headers = [
     'ID', 'Data', 'Inst', 'Setor', 'Temp', 'Umid', 'Vel.Ar',
-    'F.Int', 'F.Ext', 'I/E', 'Aerod', 'B.Int', 'B.Ext', 'CO2.I', 'CO2.E', 'PM10', 'PM2.5', 'Status', 'Coord', 'Obs'
+    'F.Int', 'F.Ext', 'I/E', 'B.Int', 'B.Ext', 'CO2.I', 'CO2.E', 'PM10', 'PM2.5', 'Status', 'Coord', 'Obs'
   ]
   // Adjusted widths to fit A4 Landscape (~800 usable width)
-  const widths = [35, 50, 60, 60, 30, 30, 30, 30, 30, 30, 30, 30, 30, 35, 35, 30, 30, 50, 70, 75] 
+  const widths = [35, 50, 60, 60, 30, 30, 30, 30, 30, 30, 35, 35, 35, 35, 35, 35, 50, 80, 85] 
   const startX = 20
   let y = 80
 
@@ -303,7 +314,6 @@ router.get('/report', requireAuth, async (req, res) => {
       String(i.fungiInternal),
       String(i.fungiExternal),
       String(i.ieRatio),
-      String(i.aerodispersoids),
       String(i.bacteriaInternal),
       String(i.bacteriaExternal),
       String(i.co2Internal),
@@ -329,6 +339,7 @@ router.get('/report', requireAuth, async (req, res) => {
 
 router.get('/:id/report', requireAuth, async (req, res) => {
   const { id } = req.params
+  const currentUser = (req as any).user
   const m = await prisma.measurement.findUnique({
     where: { id },
     include: { institution: true, sector: true, user: true, files: true }
@@ -418,10 +429,14 @@ router.get('/:id/report', requireAuth, async (req, res) => {
   doc.text(`Data/Hora: ${stamp}`)
   doc.text(`Instituição: ${m.institution?.name ?? m.institutionId}`)
   doc.text(`Setor: ${m.sector?.name ?? m.sectorId}`)
-  doc.text(`Responsável: ${m.user?.name ?? m.userId}`)
+  doc.text(`Responsável pela medição: ${m.user?.name ?? m.userId}`)
   doc.text(`Status Global: ${m.status}`)
-  
+  doc.text(`ID da medição: ${m.id}`)
+  doc.moveDown(1)
+  doc.fontSize(9).fillColor('gray')
+  doc.text(`Emitido por: ${currentUser?.name ?? currentUser?.email ?? 'Sistema'} em ${new Date().toLocaleString('pt-BR')}`)
   doc.moveDown(2)
+  doc.fontSize(10).fillColor('black')
 
   // Tabela de Parâmetros
   doc.fontSize(12).font('Helvetica-Bold').text('Parâmetros Analisados')
@@ -436,7 +451,6 @@ router.get('/:id/report', requireAuth, async (req, res) => {
     ['Fungos Internos (UFC/m3)', String(m.fungiInternal)],
     ['Fungos Externos (UFC/m3)', String(m.fungiExternal)],
     ['Relação I/E', String(m.ieRatio)],
-    ['Aerodispersóides (ug/m3)', String(m.aerodispersoids)],
     ['Bactérias Internas (UFC/m3)', String(m.bacteriaInternal)],
     ['Bactérias Externas (UFC/m3)', String(m.bacteriaExternal)],
     ['CO2 Interno (ppm)', String(m.co2Internal)],
@@ -487,35 +501,54 @@ router.get('/:id/report', requireAuth, async (req, res) => {
     }
   })
 
-  // Anexos
+  // Anexos: incluir imagens no PDF e listar demais
   if (m.files && m.files.length > 0) {
     doc.moveDown(2)
-    
-    // Check page break for attachments header
     if (doc.y > doc.page.height - 100) {
       doc.addPage()
       doc.y = 110
     }
-
     doc.fontSize(12).fillColor('black').font('Helvetica-Bold').text('Anexos')
     doc.moveDown(0.5)
     doc.font('Helvetica').fontSize(10)
-    
     const baseUrl = `${req.protocol}://${req.get('host')}`
-    
-    m.files.forEach(f => {
-      // Check page break for each file
-      if (doc.y > doc.page.height - 50) {
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp']
+    for (const f of m.files) {
+      if (doc.y > doc.page.height - 120) {
         doc.addPage()
         doc.y = 110
       }
-      
-      const fileUrl = `${baseUrl}${f.path}`
-      doc.fillColor('blue')
-         .text(f.name, { link: fileUrl, underline: true })
-         .fillColor('black') // Reset color
-    })
+      const ext = path.extname(f.name).toLowerCase()
+      const isImage = f.mime?.startsWith('image/') || imageExtensions.includes(ext)
+      const fullPath = path.join(uploadDir, path.basename(f.path))
+      if (isImage && fs.existsSync(fullPath)) {
+        try {
+          doc.text(f.name, { continued: false })
+          doc.image(fullPath, 50, doc.y + 5, { width: 180, height: 120, fit: [180, 120] })
+          doc.y += 130
+        } catch (e) {
+          doc.fillColor('blue').text(f.name, { link: `${baseUrl}${f.path}`, underline: true }).fillColor('black')
+          doc.moveDown(0.5)
+        }
+      } else {
+        doc.fillColor('blue').text(f.name, { link: `${baseUrl}${f.path}`, underline: true }).fillColor('black')
+        doc.moveDown(0.5)
+      }
+    }
   }
+
+  // Assinatura eletrônica / validação
+  doc.moveDown(2)
+  if (doc.y > doc.page.height - 80) {
+    doc.addPage()
+    doc.y = 110
+  }
+  doc.fontSize(10).fillColor('black').font('Helvetica-Bold').text('Validação do relatório')
+  doc.moveDown(0.5)
+  doc.font('Helvetica').fontSize(9).fillColor('gray')
+  doc.text('Documento gerado eletronicamente pelo sistema Air Watch.')
+  doc.text(`Emitido por: ${currentUser?.name ?? currentUser?.email ?? 'N/A'} (ID: ${currentUser?.id ?? 'N/A'}) em ${new Date().toLocaleString('pt-BR')}.`)
+  doc.text('Este relatório constitui registro técnico da medição realizada.')
 
   doc.end()
 })

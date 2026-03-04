@@ -16,7 +16,6 @@ const PARAMETERS = [
   { key: 'fungiInternal', labelKey: 'measurements.fungi_internal_label', type: 'bar', color: '#4caf50' },
   { key: 'fungiExternal', labelKey: 'measurements.fungi_external_label', type: 'bar', color: '#8bc34a' },
   { key: 'ieRatio', labelKey: 'measurements.ie_ratio_label', type: 'bar', color: '#ff9800' },
-  { key: 'aerodispersoids', labelKey: 'measurements.aerodispersoids_label', type: 'bar', color: '#9c27b0' },
   { key: 'bacteriaInternal', labelKey: 'measurements.bacteria_internal_label', type: 'bar', color: '#673ab7' },
   { key: 'bacteriaExternal', labelKey: 'measurements.bacteria_external_label', type: 'bar', color: '#3f51b5' },
   { key: 'co2Internal', labelKey: 'measurements.co2_internal_label', type: 'bar', color: '#795548' },
@@ -59,16 +58,21 @@ export default function DashboardPage() {
     load()
   }, [])
 
-  const checkCompliance = (key: string, val: number) => {
+  const checkCompliance = (key: string, val: number, m?: any) => {
     if (!limits || val === undefined || val === null) return 'unknown'
     if (key === 'temperature') return (val >= limits.temperatureMin && val <= limits.temperatureMax) ? 'ok' : 'nok'
     if (key === 'humidity') return (val >= limits.humidityMin && val <= limits.humidityMax) ? 'ok' : 'nok'
     if (key === 'airSpeed') return val <= limits.airSpeed ? 'ok' : 'nok'
-    if (key === 'fungiInternal') return val <= limits.fungiInternal ? 'ok' : 'nok'
+    if (key === 'fungiInternal') return val < limits.fungiInternal ? 'ok' : 'nok'
     if (key === 'ieRatio') return val <= limits.ieMax ? 'ok' : 'nok'
-    if (key === 'aerodispersoids') return val <= limits.aerodispersoids ? 'ok' : 'nok'
-    if (key === 'bacteriaInternal') return val <= limits.bacteriaInternal ? 'ok' : 'nok'
-    if (key === 'co2Internal') return val <= limits.co2 ? 'ok' : 'nok'
+    if (key === 'bacteriaInternal') {
+      const bacteriaRatio = m?.bacteriaExternal === 0 ? 0 : (m?.bacteriaInternal / m?.bacteriaExternal)
+      return (val < limits.bacteriaInternal && bacteriaRatio <= limits.ieMax) ? 'ok' : 'nok'
+    }
+    if (key === 'co2Internal') {
+      const diff = m ? (m.co2Internal - m.co2External) : 0
+      return diff <= 700 ? 'ok' : 'nok'
+    }
     if (key === 'pm10') return val <= limits.pm10 ? 'ok' : 'nok'
     if (key === 'pm25') return val <= limits.pm25 ? 'ok' : 'nok'
     return 'unknown'
@@ -120,8 +124,17 @@ export default function DashboardPage() {
 
           <Grid container spacing={2}>
             {PARAMETERS.map(p => {
-              const avg = kpis[`${p.key}Avg`]
-              const status = checkCompliance(p.key, avg)
+              const avgVal = kpis[`${p.key}Avg`]
+              // Pass the whole kpis object as context for ratios/diffs, mapping keys to match Measurement structure
+              const context = {
+                co2Internal: kpis.co2InternalAvg,
+                co2External: kpis.co2ExternalAvg,
+                bacteriaInternal: kpis.bacteriaInternalAvg,
+                bacteriaExternal: kpis.bacteriaExternalAvg,
+                fungiInternal: kpis.fungiInternalAvg,
+                fungiExternal: kpis.fungiExternalAvg
+              }
+              const status = checkCompliance(p.key, avgVal, context)
               return (
                 <Grid item xs={12} md={6} lg={4} key={p.key}>
                   <Paper sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -135,7 +148,7 @@ export default function DashboardPage() {
                         />
                       )}
                     </Box>
-                    <Typography variant="h4" sx={{ mb: 2 }}>{avg?.toFixed(2) || '-'}</Typography>
+                    <Typography variant="h4" sx={{ mb: 2 }}>{avgVal?.toFixed(2) || '-'}</Typography>
                     <Box sx={{ flexGrow: 1, minHeight: 150 }}>
                       {p.type === 'bar' ? (
                         <Bar 

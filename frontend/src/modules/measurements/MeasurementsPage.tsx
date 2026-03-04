@@ -1,8 +1,20 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../../shared/api'
 import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Paper, TextField, Typography, FormControl, InputLabel, Select, MenuItem, Pagination, Snackbar, Alert, Chip } from '@mui/material'
 import { format } from 'date-fns'
 import { useTranslation } from 'react-i18next'
+
+/** Retorna data no fuso local (YYYY-MM-DD) para evitar adianto de 3h do UTC */
+function localDateString(d: Date = new Date()) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+/** Retorna hora no fuso local (HH:MM) */
+function localTimeString(d: Date = new Date()) {
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0')
+}
 
 type Measurement = {
   id: string
@@ -15,7 +27,6 @@ type Measurement = {
   fungiInternal: number
   fungiExternal: number
   ieRatio: number
-  aerodispersoids: number
   bacteriaInternal: number
   bacteriaExternal: number
   co2Internal: number
@@ -40,8 +51,8 @@ export default function MeasurementsPage() {
   const [institutions, setInstitutions] = useState<Institution[]>([])
   const [sectors, setSectors] = useState<Sector[]>([])
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState<Partial<Measurement>>({ date: new Date().toISOString().slice(0,10) })
-  const [formTime, setFormTime] = useState<string>(new Date().toISOString().slice(11,16))
+  const [form, setForm] = useState<Partial<Measurement>>({ date: localDateString() })
+  const [formTime, setFormTime] = useState<string>(localTimeString())
   const [photos, setPhotos] = useState<File[]>([])
   const [reports, setReports] = useState<File[]>([])
   const [certificates, setCertificates] = useState<File[]>([])
@@ -51,7 +62,13 @@ export default function MeasurementsPage() {
   const [pageSize] = useState(10)
   const [total, setTotal] = useState(0)
   const [feedback, setFeedback] = useState<{ open: boolean; message: string; type: 'success' | 'error' | 'warning' }>({ open: false, message: '', type: 'success' })
-  const load = async () => { const { data } = await api.get('/api/measurements', { params: { institutionId: filterInstitutionId || undefined, page, pageSize, q: search } }); setItems(data.items); setTotal(data.total) }
+  const load = async () => {
+    const params: Record<string, string | number | undefined> = { page, pageSize, q: search || undefined }
+    if (filterInstitutionId) params.institutionId = filterInstitutionId
+    const { data } = await api.get('/api/measurements', { params })
+    setItems(data.items)
+    setTotal(data.total)
+  }
   
   const handleGetLocation = () => {
     if (!navigator.geolocation) {
@@ -76,9 +93,63 @@ export default function MeasurementsPage() {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, setter: React.Dispatch<React.SetStateAction<File[]>>) => {
     if (e.target.files) {
       setter(prev => [...prev, ...Array.from(e.target.files!)])
-      // Reset input value to allow selecting the same file again if needed
       e.target.value = ''
     }
+  }
+
+  const [cameraOpen, setCameraOpen] = useState(false)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+
+  const handleOpenCamera = () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setFeedback({ open: true, message: t('common.camera_not_supported'), type: 'error' })
+      return
+    }
+    setCameraOpen(true)
+  }
+
+  useEffect(() => {
+    if (!cameraOpen || !videoRef.current) return
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      .then((stream) => {
+        streamRef.current = stream
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream
+          videoRef.current.play()
+        }
+      })
+      .catch(() => {
+        setCameraOpen(false)
+        setFeedback({ open: true, message: t('common.camera_error'), type: 'error' })
+      })
+    return () => {
+      streamRef.current?.getTracks().forEach(t => t.stop())
+      streamRef.current = null
+    }
+  }, [cameraOpen])
+
+  const handleCapturePhoto = () => {
+    const video = videoRef.current
+    if (!video?.srcObject || !(video.videoWidth && video.videoHeight)) return
+    const canvas = document.createElement('canvas')
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    canvas.getContext('2d')?.drawImage(video, 0, 0)
+    canvas.toBlob((blob) => {
+      if (blob) {
+        const file = new File([blob], `foto_${Date.now()}.jpg`, { type: 'image/jpeg' })
+        setPhotos(prev => [...prev, file])
+        setFeedback({ open: true, message: t('common.photo_captured'), type: 'success' })
+      }
+      setCameraOpen(false)
+    }, 'image/jpeg', 0.9)
+  }
+
+  const handleCloseCamera = () => {
+    streamRef.current?.getTracks().forEach(t => t.stop())
+    streamRef.current = null
+    setCameraOpen(false)
   }
 
   useEffect(() => { load(); api.get('/api/institutions').then(r=>setInstitutions(r.data.items)); api.get('/api/sectors').then(r=>setSectors(r.data.items)) }, [])
@@ -109,7 +180,7 @@ export default function MeasurementsPage() {
         await upload(certificates, 'certificate')
       }
       
-      setOpen(false); setForm({}); setFormTime(new Date().toISOString().slice(11,16)); setPhotos([]); setReports([]); setCertificates([]); load()
+      setOpen(false); setForm({}); setFormTime(localTimeString()); setPhotos([]); setReports([]); setCertificates([]); load()
       setFeedback({ 
         open: true, 
         message: uploadErrors > 0 
@@ -123,7 +194,17 @@ export default function MeasurementsPage() {
     }
   }
   const remove = async (id: string) => { await api.delete(`/api/measurements/${id}`); load() }
-  const download = async (fmt: 'pdf'|'excel') => { const res = await api.get('/api/measurements/report', { params: { format: fmt, institutionId: filterInstitutionId || undefined }, responseType: 'blob' }); const url = URL.createObjectURL(res.data); const a = document.createElement('a'); a.href = url; a.download = `relatorio.${fmt==='pdf'?'pdf':'xlsx'}`; a.click(); URL.revokeObjectURL(url) }
+  const download = async (fmt: 'pdf'|'excel') => {
+    const params: Record<string, string | undefined> = { format: fmt }
+    if (filterInstitutionId) params.institutionId = filterInstitutionId
+    const res = await api.get('/api/measurements/report', { params, responseType: 'blob' })
+    const url = URL.createObjectURL(res.data)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `relatorio.${fmt === 'pdf' ? 'pdf' : 'xlsx'}`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
   const downloadOne = async (id: string) => {
     const res = await api.get(`/api/measurements/${id}/report`, { responseType: 'blob' })
     const disp = (res.headers as any)['content-disposition'] as string | undefined
@@ -152,7 +233,7 @@ export default function MeasurementsPage() {
               {institutions.map(i => <MenuItem key={i.id} value={i.id}>{i.name}</MenuItem>)}
             </Select>
           </FormControl>
-          <Button variant="contained" sx={{ width: { xs: '100%', sm: 'auto' } }} onClick={() => { setForm({ date: new Date().toISOString().slice(0,10) }); setFormTime(new Date().toISOString().slice(11,16)); setOpen(true) }}>{t('common.new')}</Button>
+          <Button variant="contained" sx={{ width: { xs: '100%', sm: 'auto' } }} onClick={() => { setForm({ date: localDateString() }); setFormTime(localTimeString()); setOpen(true) }}>{t('common.new')}</Button>
           <Button sx={{ width: { xs: '100%', sm: 'auto' } }} onClick={() => download('pdf')}>{t('common.export_pdf')}</Button>
           <Button sx={{ width: { xs: '100%', sm: 'auto' } }} onClick={() => download('excel')}>{t('common.export_excel')}</Button>
         </Box>
@@ -166,17 +247,33 @@ export default function MeasurementsPage() {
                 {format(new Date(m.date), 'dd/MM/yyyy | HH:mm')} | {m.institution?.name || m.institutionId} {'>'} {m.sector?.name || m.sectorId} | {m.status === 'Conforme' ? t('measurements.status_compliant') : t('measurements.status_non_compliant')}
               </Typography>
               <Box sx={{ display:'flex', gap:1, flexWrap:'wrap', mt:{ xs: 1, sm: 0 } }}>
-                <Button sx={{ width:{ xs:'100%', sm:'auto' } }} onClick={() => { setForm({ ...m, date: m.date.slice(0,10) }); setFormTime(m.date.slice(11,16)); setOpen(true) }}>{t('common.edit')}</Button>
+                <Button sx={{ width:{ xs:'100%', sm:'auto' } }} onClick={() => {
+                  const d = new Date(m.date)
+                  setForm({ ...m, date: localDateString(d) })
+                  setFormTime(localTimeString(d))
+                  setOpen(true)
+                }}>{t('common.edit')}</Button>
                 <Button sx={{ width:{ xs:'100%', sm:'auto' } }} onClick={() => downloadOne(m.id)}>{t('common.pdf')}</Button>
                 <Button color="error" sx={{ width:{ xs:'100%', sm:'auto' } }} onClick={() => remove(m.id)}>{t('common.delete')}</Button>
               </Box>
             </Box>
             <Box sx={{ mt:1 }}>
               <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>{t('common.existing_attachments')}</Typography>
-              <Box sx={{ display:'flex', flexWrap:'wrap', gap:1, mb:1 }}>
-                {(m.files||[]).map(f => (
-                  <Button key={f.id} href={f.path} target="_blank" rel="noopener" sx={{ color: 'primary.main' }}>{(f as any).category ? `[${(f as any).category}] ` : ''}{f.name}</Button>
-                ))}
+              <Box sx={{ display:'flex', flexWrap:'wrap', gap:1, mb:1, alignItems: 'center' }}>
+                {(m.files||[]).map(f => {
+                  const fullUrl = `${api.defaults.baseURL}${f.path}`
+                  const isImage = (f.mime || '').startsWith('image/')
+                  return (
+                    <Box key={f.id} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
+                      {isImage ? (
+                        <a href={fullUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
+                          <img src={fullUrl} alt={f.name} style={{ maxWidth: 80, maxHeight: 60, objectFit: 'cover', border: '1px solid #ccc', borderRadius: 4 }} />
+                        </a>
+                      ) : null}
+                      <Button size="small" href={fullUrl} target="_blank" rel="noopener noreferrer" sx={{ color: 'primary.main' }}>{(f as any).category ? `[${(f as any).category}] ` : ''}{f.name}</Button>
+                    </Box>
+                  )
+                })}
               </Box>
             </Box>
           </Box>
@@ -210,7 +307,6 @@ export default function MeasurementsPage() {
               ['fungiInternal',t('measurements.fungi_internal_label')],
               ['fungiExternal',t('measurements.fungi_external_label')],
               ['ieRatio',t('measurements.ie_ratio_label')],
-              ['aerodispersoids',t('measurements.aerodispersoids_label')],
               ['bacteriaInternal',t('measurements.bacteria_internal_label')],
               ['bacteriaExternal',t('measurements.bacteria_external_label')],
               ['co2Internal',t('measurements.co2_internal_label')],
@@ -218,13 +314,38 @@ export default function MeasurementsPage() {
               ['pm10',t('measurements.pm10_label')],
               ['pm25',t('measurements.pm25_label')]
             ].map(([key,label]) => (
-              <TextField key={key} label={label as string} type="number" fullWidth value={(form as any)[key]||''} onChange={e=>setForm({ ...form, [key]: parseFloat(e.target.value) })} />
+              <TextField 
+                key={key} 
+                label={label as string} 
+                type="number" 
+                fullWidth 
+                disabled={key === 'ieRatio'}
+                value={(form as any)[key]||''} 
+                onChange={e => {
+                  const val = parseFloat(e.target.value)
+                  const newForm = { ...form, [key]: val }
+                  
+                  // Auto-calculate I/E Ratio for Fungi
+                  if (key === 'fungiInternal' || key === 'fungiExternal') {
+                    const int = key === 'fungiInternal' ? val : (form.fungiInternal || 0)
+                    const ext = key === 'fungiExternal' ? val : (form.fungiExternal || 0)
+                    newForm.ieRatio = ext === 0 ? 0 : parseFloat((int / ext).toFixed(2))
+                  }
+                  
+                  setForm(newForm)
+                }} 
+              />
             ))}
           </Box>
-          <Box sx={{ mt: 2, display: 'flex', gap: 2, alignItems: 'center' }}>
-            <TextField label={t('common.latitude')} type="number" value={form.latitude || ''} onChange={e=>setForm({ ...form, latitude: parseFloat(e.target.value) })} sx={{ width: 150 }} />
-            <TextField label={t('common.longitude')} type="number" value={form.longitude || ''} onChange={e=>setForm({ ...form, longitude: parseFloat(e.target.value) })} sx={{ width: 150 }} />
+          <Box sx={{ mt: 2, display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
+            <TextField label={t('common.latitude')} type="number" value={form.latitude ?? ''} onChange={e=>setForm({ ...form, latitude: parseFloat(e.target.value) || undefined })} sx={{ width: 150 }} />
+            <TextField label={t('common.longitude')} type="number" value={form.longitude ?? ''} onChange={e=>setForm({ ...form, longitude: parseFloat(e.target.value) || undefined })} sx={{ width: 150 }} />
             <Button variant="outlined" onClick={handleGetLocation}>{t('common.get_location')}</Button>
+            {typeof form.latitude === 'number' && typeof form.longitude === 'number' && (
+              <Button variant="outlined" href={`https://www.google.com/maps?q=${form.latitude},${form.longitude}`} target="_blank" rel="noopener noreferrer">
+                {t('common.view_on_map')}
+              </Button>
+            )}
           </Box>
           <TextField label={t('common.comments')} multiline rows={3} fullWidth sx={{ mt:2 }} value={form.comments||''} onChange={e=>setForm({ ...form, comments: e.target.value })} />
           <Box sx={{ mt:3 }}>
@@ -238,8 +359,11 @@ export default function MeasurementsPage() {
                     <input hidden type="file" multiple accept="image/*" onChange={e=>handleFileSelect(e, setPhotos)} />
                   </Button>
                   <Button variant="contained" component="label" size="small">
-                    {t('common.take_photo')}
+                    {t('common.take_photo_mobile')}
                     <input hidden type="file" accept="image/*" capture="environment" onChange={e=>handleFileSelect(e, setPhotos)} />
+                  </Button>
+                  <Button variant="contained" size="small" onClick={handleOpenCamera}>
+                    {t('common.take_photo')}
                   </Button>
                 </Box>
                 {photos.length > 0 && (
@@ -284,6 +408,16 @@ export default function MeasurementsPage() {
         <DialogActions>
           <Button onClick={()=>setOpen(false)}>{t('common.cancel')}</Button>
           <Button variant="contained" onClick={save}>{t('common.save')}</Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog open={cameraOpen} onClose={handleCloseCamera} maxWidth="sm" fullWidth>
+        <DialogTitle>{t('common.take_photo')}</DialogTitle>
+        <DialogContent>
+          <video ref={videoRef} id="camera-preview" playsInline muted style={{ width: '100%', maxHeight: 360, background: '#000', borderRadius: 8 }} />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseCamera}>{t('common.cancel')}</Button>
+          <Button variant="contained" onClick={handleCapturePhoto}>{t('common.capture')}</Button>
         </DialogActions>
       </Dialog>
       <Snackbar open={feedback.open} autoHideDuration={6000} onClose={()=>setFeedback({ ...feedback, open: false })}>

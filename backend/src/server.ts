@@ -12,6 +12,7 @@ import contactRouter from './web/contact.js'
 import { prisma } from './db.js'
 
 const app = express()
+app.set('trust proxy', 1)
 app.use(cors({ origin: true, credentials: true, exposedHeaders: ['Content-Disposition'] }))
 app.use(express.json({ limit: '2mb' }))
 const uploadDir = process.env.UPLOAD_DIR ? String(process.env.UPLOAD_DIR) : path.join(process.cwd(), 'uploads')

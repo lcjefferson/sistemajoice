@@ -49,7 +49,6 @@ model Measurement {
   fungiInternal    Float
   fungiExternal    Float
   ieRatio          Float
-  aerodispersoids  Float
   bacteriaInternal Float
   bacteriaExternal Float
   co2Internal      Float

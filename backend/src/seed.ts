@@ -45,7 +45,6 @@ async function run() {
         fungiInternal: randomInRange(300, 900),
         fungiExternal: randomInRange(300, 1200),
         ieRatio: randomInRange(0.9, 1.8),
-        aerodispersoids: randomInRange(40, 100),
         bacteriaInternal: randomInRange(200, 600),
         bacteriaExternal: randomInRange(200, 1200),
         co2Internal: randomInRange(500, 1200),
