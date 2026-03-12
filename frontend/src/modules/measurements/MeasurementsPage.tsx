@@ -100,8 +100,15 @@ export default function MeasurementsPage() {
   const [cameraOpen, setCameraOpen] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
+  const mobilePhotoInputRef = useRef<HTMLInputElement>(null)
+
+  const isMobileOrTouch = () => typeof navigator !== 'undefined' && (navigator.maxTouchPoints > 0 || /Android|webOS|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent))
 
   const handleOpenCamera = () => {
+    if (isMobileOrTouch()) {
+      mobilePhotoInputRef.current?.click()
+      return
+    }
     if (!navigator.mediaDevices?.getUserMedia) {
       setFeedback({ open: true, message: t('common.camera_not_supported'), type: 'error' })
       return
@@ -195,7 +202,7 @@ export default function MeasurementsPage() {
   }
   const remove = async (id: string) => { await api.delete(`/api/measurements/${id}`); load() }
   const download = async (fmt: 'pdf'|'excel') => {
-    const params: Record<string, string | undefined> = { format: fmt }
+    const params: Record<string, string> = { format: fmt, _: String(Date.now()) }
     if (filterInstitutionId) params.institutionId = filterInstitutionId
     const res = await api.get('/api/measurements/report', { params, responseType: 'blob' })
     const url = URL.createObjectURL(res.data)
@@ -206,7 +213,7 @@ export default function MeasurementsPage() {
     URL.revokeObjectURL(url)
   }
   const downloadOne = async (id: string) => {
-    const res = await api.get(`/api/measurements/${id}/report`, { responseType: 'blob' })
+    const res = await api.get(`/api/measurements/${id}/report`, { params: { _: Date.now() }, responseType: 'blob' })
     const disp = (res.headers as any)['content-disposition'] as string | undefined
     const match = disp?.match(/filename="(.+?)"/)
     const fname = match?.[1] || `medicao_${id}.pdf`
@@ -358,10 +365,14 @@ export default function MeasurementsPage() {
                     {t('common.select_photos')}
                     <input hidden type="file" multiple accept="image/*" onChange={e=>handleFileSelect(e, setPhotos)} />
                   </Button>
-                  <Button variant="contained" component="label" size="small">
-                    {t('common.take_photo_mobile')}
-                    <input hidden type="file" accept="image/*" capture="environment" onChange={e=>handleFileSelect(e, setPhotos)} />
-                  </Button>
+                  <input
+                    ref={mobilePhotoInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    style={{ display: 'none' }}
+                    onChange={e => { handleFileSelect(e, setPhotos); e.target.value = '' }}
+                  />
                   <Button variant="contained" size="small" onClick={handleOpenCamera}>
                     {t('common.take_photo')}
                   </Button>

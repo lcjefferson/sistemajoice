@@ -62,7 +62,7 @@ export default function DashboardPage() {
     if (!limits || val === undefined || val === null) return 'unknown'
     if (key === 'temperature') return (val >= limits.temperatureMin && val <= limits.temperatureMax) ? 'ok' : 'nok'
     if (key === 'humidity') return (val >= limits.humidityMin && val <= limits.humidityMax) ? 'ok' : 'nok'
-    if (key === 'airSpeed') return val <= limits.airSpeed ? 'ok' : 'nok'
+    if (key === 'airSpeed') return val <= (limits.airSpeedMax ?? limits.airSpeed ?? 0.2) ? 'ok' : 'nok'
     if (key === 'fungiInternal') return val < limits.fungiInternal ? 'ok' : 'nok'
     if (key === 'ieRatio') return val <= limits.ieMax ? 'ok' : 'nok'
     if (key === 'bacteriaInternal') {
@@ -71,7 +71,7 @@ export default function DashboardPage() {
     }
     if (key === 'co2Internal') {
       const diff = m ? (m.co2Internal - m.co2External) : 0
-      return diff <= 700 ? 'ok' : 'nok'
+      return diff <= (limits.co2DiffMax ?? 700) ? 'ok' : 'nok'
     }
     if (key === 'pm10') return val <= limits.pm10 ? 'ok' : 'nok'
     if (key === 'pm25') return val <= limits.pm25 ? 'ok' : 'nok'

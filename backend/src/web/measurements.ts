@@ -157,6 +157,8 @@ router.get('/bi', requireAuth, async (req, res) => {
 })
 
 router.get('/report', requireAuth, async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
+  res.setHeader('Pragma', 'no-cache')
   const { format = 'pdf', institutionId, sectorId, from, to, limit } = req.query as any
   const where: any = {}
   if (institutionId && String(institutionId).trim()) where.institutionId = String(institutionId).trim()
@@ -169,6 +171,12 @@ router.get('/report', requireAuth, async (req, res) => {
     take,
     include: { institution: true, sector: true }
   })
+  let filterInstitutionName: string | null = null
+  if (institutionId && items.length > 0) filterInstitutionName = items[0].institution?.name ?? null
+  if (institutionId && !filterInstitutionName) {
+    const inst = await prisma.institution.findUnique({ where: { id: String(institutionId) } })
+    filterInstitutionName = inst?.name ?? null
+  }
   if (String(format) === 'excel') {
     const wb = new ExcelJS.Workbook()
     const ws = wb.addWorksheet('Medições')
@@ -221,7 +229,7 @@ router.get('/report', requireAuth, async (req, res) => {
     return res.send(Buffer.from(buf))
   }
 
-  const doc = new PDFDocument({ margin: 20, size: 'A4', layout: 'landscape' })
+  const doc = new PDFDocument({ margin: 18, size: 'A4', layout: 'landscape' })
   const chunks: Buffer[] = []
   doc.on('data', (c: Buffer) => chunks.push(c))
   doc.on('end', () => {
@@ -240,12 +248,15 @@ router.get('/report', requireAuth, async (req, res) => {
   const drawHeader = () => {
     if (fs.existsSync(logoPath)) {
       try {
-        doc.image(logoPath, 20, 20, { height: 30 })
+        doc.image(logoPath, 18, 18, { height: 28 })
       } catch (e) {
         console.error('Erro ao carregar logo:', e)
       }
     }
-    doc.fontSize(16).text('Relatório de Medições', 0, 30, { align: 'center' })
+    doc.fontSize(14).text('Relatório de Medições', 0, 28, { align: 'center' })
+    if (filterInstitutionName) {
+      doc.fontSize(9).fillColor('gray').text(`Filtro: ${filterInstitutionName}`, 0, 48, { align: 'center' }).fillColor('black')
+    }
   }
 
   const drawFooter = () => {
@@ -263,13 +274,13 @@ router.get('/report', requireAuth, async (req, res) => {
     'ID', 'Data', 'Inst', 'Setor', 'Temp', 'Umid', 'Vel.Ar',
     'F.Int', 'F.Ext', 'I/E', 'B.Int', 'B.Ext', 'CO2.I', 'CO2.E', 'PM10', 'PM2.5', 'Status', 'Coord', 'Obs'
   ]
-  // Adjusted widths to fit A4 Landscape (~800 usable width)
-  const widths = [35, 50, 60, 60, 30, 30, 30, 30, 30, 30, 35, 35, 35, 35, 35, 35, 50, 80, 85] 
-  const startX = 20
-  let y = 80
+  // Larguras para caber em A4 paisagem (842pt) com margem 18; total < 806
+  const widths = [32, 44, 52, 52, 26, 26, 26, 26, 26, 24, 28, 28, 28, 28, 28, 28, 42, 68, 72]
+  const startX = 18
+  let y = filterInstitutionName ? 72 : 68
 
   const drawTableHead = () => {
-    doc.fontSize(7).font('Helvetica-Bold')
+    doc.fontSize(6).font('Helvetica-Bold')
     let x = startX
     headers.forEach((h, i) => {
       doc.text(h, x, y, { width: widths[i], align: 'left' })
@@ -325,19 +336,21 @@ router.get('/report', requireAuth, async (req, res) => {
       obs
     ]
 
-    doc.fontSize(6)
+    doc.fontSize(5)
     let x = startX
     row.forEach((cell, idx) => {
-      doc.text(cell, x, y, { width: widths[idx], align: 'left' })
+      doc.text(String(cell).substring(0, 14), x, y, { width: widths[idx], align: 'left' })
       x += widths[idx]
     })
-    y += 12
+    y += 10
   }
 
   doc.end()
 })
 
 router.get('/:id/report', requireAuth, async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
+  res.setHeader('Pragma', 'no-cache')
   const { id } = req.params
   const currentUser = (req as any).user
   const m = await prisma.measurement.findUnique({
@@ -388,19 +401,18 @@ router.get('/:id/report', requireAuth, async (req, res) => {
        .stroke()
   }
 
+  const toBR = (d: Date) => d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+
   const drawFooter = () => {
     const bottom = doc.page.height - 50
-    
-    // Linha verde limão
     doc.lineWidth(1)
        .moveTo(50, bottom - 15)
        .lineTo(545, bottom - 15)
        .strokeColor('#32CD32')
        .stroke()
-
     doc.fontSize(8).fillColor('gray')
     doc.text(
-      `${systemName} - ${slogan} | Gerado em: ${new Date().toLocaleString('pt-BR')}`,
+      `${systemName} - ${slogan} | Gerado em: ${toBR(new Date())}`,
       50,
       bottom,
       { align: 'center', width: doc.page.width - 100 }
@@ -420,10 +432,8 @@ router.get('/:id/report', requireAuth, async (req, res) => {
   // Informações Gerais
   doc.fontSize(12).fillColor('black').font('Helvetica-Bold').text('Informações Gerais')
   doc.moveDown(0.5)
-  
-  const pad = (n: number) => String(n).padStart(2, '0')
-  const dt = m.date
-  const stamp = `${pad(dt.getDate())}/${pad(dt.getMonth() + 1)}/${dt.getFullYear()} | ${pad(dt.getHours())}:${pad(dt.getMinutes())}`
+  const stamp = toBR(new Date(m.date))
+  const shortId = `#${m.id.slice(-8).toUpperCase()}`
 
   doc.font('Helvetica').fontSize(10)
   doc.text(`Data/Hora: ${stamp}`)
@@ -431,10 +441,10 @@ router.get('/:id/report', requireAuth, async (req, res) => {
   doc.text(`Setor: ${m.sector?.name ?? m.sectorId}`)
   doc.text(`Responsável pela medição: ${m.user?.name ?? m.userId}`)
   doc.text(`Status Global: ${m.status}`)
-  doc.text(`ID da medição: ${m.id}`)
+  doc.text(`ID da medição: ${shortId}`)
   doc.moveDown(1)
   doc.fontSize(9).fillColor('gray')
-  doc.text(`Emitido por: ${currentUser?.name ?? currentUser?.email ?? 'Sistema'} em ${new Date().toLocaleString('pt-BR')}`)
+  doc.text(`Emitido por: ${currentUser?.name ?? currentUser?.email ?? 'Sistema'} em ${toBR(new Date())}.`)
   doc.moveDown(2)
   doc.fontSize(10).fillColor('black')
 
@@ -458,7 +468,6 @@ router.get('/:id/report', requireAuth, async (req, res) => {
     ['PM10 (ug/m3)', String(m.pm10)],
     ['PM2.5 (ug/m3)', String(m.pm25)],
     ['Localização', coord],
-    ['ID', m.id],
     ['Comentários', (m as any).comments || '-']
   ]
 
@@ -501,7 +510,7 @@ router.get('/:id/report', requireAuth, async (req, res) => {
     }
   })
 
-  // Anexos: incluir imagens no PDF e listar demais
+  // Anexos: incluir imagens no PDF e listar Laudos/Certificados como links
   if (m.files && m.files.length > 0) {
     doc.moveDown(2)
     if (doc.y > doc.page.height - 100) {
@@ -509,9 +518,12 @@ router.get('/:id/report', requireAuth, async (req, res) => {
       doc.y = 110
     }
     doc.fontSize(12).fillColor('black').font('Helvetica-Bold').text('Anexos')
+    doc.moveDown(0.3)
+    doc.font('Helvetica').fontSize(9).fillColor('gray')
+    doc.text('Para abrir Laudos e Certificados em PDF: copie o link abaixo e abra no navegador (é necessário estar logado no sistema).')
     doc.moveDown(0.5)
-    doc.font('Helvetica').fontSize(10)
-    const baseUrl = `${req.protocol}://${req.get('host')}`
+    doc.fontSize(10).fillColor('black')
+    const baseUrl = (process.env.BACKEND_PUBLIC_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '')
     const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp']
     for (const f of m.files) {
       if (doc.y > doc.page.height - 120) {
@@ -547,7 +559,8 @@ router.get('/:id/report', requireAuth, async (req, res) => {
   doc.moveDown(0.5)
   doc.font('Helvetica').fontSize(9).fillColor('gray')
   doc.text('Documento gerado eletronicamente pelo sistema Air Watch.')
-  doc.text(`Emitido por: ${currentUser?.name ?? currentUser?.email ?? 'N/A'} (ID: ${currentUser?.id ?? 'N/A'}) em ${new Date().toLocaleString('pt-BR')}.`)
+  const userShortId = currentUser?.id ? `#${String(currentUser.id).slice(-8).toUpperCase()}` : 'N/A'
+  doc.text(`Emitido por: ${currentUser?.name ?? currentUser?.email ?? 'N/A'} (ID usuário: ${userShortId}) em ${toBR(new Date())}.`)
   doc.text('Este relatório constitui registro técnico da medição realizada.')
 
   doc.end()

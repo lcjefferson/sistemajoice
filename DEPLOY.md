@@ -15,6 +15,7 @@
 | `DATABASE_URL`| **Sim**     | Ex.: `file:./prisma/dev.db` (SQLite) ou connection string PostgreSQL |
 | `JWT_SECRET`  | **Sim**     | Chave secreta para tokens JWT (gerar valor aleatório forte) |
 | `UPLOAD_DIR`  | Não        | Pasta de uploads (default: `./uploads`). Em produção use caminho persistente (ex.: volume/disco). |
+| `BACKEND_PUBLIC_URL` | Não | URL pública do backend (ex.: `https://sua-api.exemplo.com`). Usada nos links de Laudos/Certificados nos PDFs; se não definida, usa `req.protocol` e `req.get('host')`. |
 
 ### Frontend (no momento do build)
 
