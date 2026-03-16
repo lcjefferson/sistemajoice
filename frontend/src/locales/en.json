@@ -71,6 +71,7 @@
     "camera_error": "Could not access camera",
     "photo_captured": "Photo captured",
     "take_photo_mobile": "Take photo (mobile)",
+    "take_photo_desktop": "Camera (desktop)",
     "capture": "Capture",
     "search": "Search",
     "status": "Status",

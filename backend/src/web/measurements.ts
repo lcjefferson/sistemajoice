@@ -19,10 +19,12 @@ const storage = multer.diskStorage({
 const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } })
 
 router.get('/', requireAuth, async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
+  res.setHeader('Pragma', 'no-cache')
   const { institutionId, sectorId, from, to, q } = req.query as any
   const where: any = {}
-  if (institutionId) where.institutionId = String(institutionId)
-  if (sectorId) where.sectorId = String(sectorId)
+  if (institutionId && String(institutionId).trim()) where.institutionId = String(institutionId).trim()
+  if (sectorId && String(sectorId).trim()) where.sectorId = String(sectorId).trim()
   if (from || to) where.date = { gte: from ? new Date(from) : undefined, lte: to ? new Date(to) : undefined }
   if (q) {
     where.OR = [
@@ -157,11 +159,13 @@ router.get('/bi', requireAuth, async (req, res) => {
 })
 
 router.get('/report', requireAuth, async (req, res) => {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
   res.setHeader('Pragma', 'no-cache')
+  res.setHeader('Expires', '0')
   const { format = 'pdf', institutionId, sectorId, from, to, limit } = req.query as any
   const where: any = {}
-  if (institutionId && String(institutionId).trim()) where.institutionId = String(institutionId).trim()
+  const instId = institutionId != null ? String(institutionId).trim() : ''
+  if (instId) where.institutionId = instId
   if (sectorId && String(sectorId).trim()) where.sectorId = String(sectorId).trim()
   if (from || to) where.date = { gte: from ? new Date(from) : undefined, lte: to ? new Date(to) : undefined }
   const take = Math.min(Number(limit || 500), 2000)
@@ -172,9 +176,9 @@ router.get('/report', requireAuth, async (req, res) => {
     include: { institution: true, sector: true }
   })
   let filterInstitutionName: string | null = null
-  if (institutionId && items.length > 0) filterInstitutionName = items[0].institution?.name ?? null
-  if (institutionId && !filterInstitutionName) {
-    const inst = await prisma.institution.findUnique({ where: { id: String(institutionId) } })
+  if (instId && items.length > 0) filterInstitutionName = items[0].institution?.name ?? null
+  if (instId && !filterInstitutionName) {
+    const inst = await prisma.institution.findUnique({ where: { id: instId } })
     filterInstitutionName = inst?.name ?? null
   }
   if (String(format) === 'excel') {
@@ -254,9 +258,13 @@ router.get('/report', requireAuth, async (req, res) => {
       }
     }
     doc.fontSize(14).text('Relatório de Medições', 0, 28, { align: 'center' })
+    doc.fontSize(9).fillColor('gray')
     if (filterInstitutionName) {
-      doc.fontSize(9).fillColor('gray').text(`Filtro: ${filterInstitutionName}`, 0, 48, { align: 'center' }).fillColor('black')
+      doc.text(`Filtro: ${filterInstitutionName}`, 0, 48, { align: 'center' })
+    } else {
+      doc.text('Todas as instituições', 0, 48, { align: 'center' })
     }
+    doc.fillColor('black')
   }
 
   const drawFooter = () => {
@@ -277,7 +285,7 @@ router.get('/report', requireAuth, async (req, res) => {
   // Larguras para caber em A4 paisagem (842pt) com margem 18; total < 806
   const widths = [32, 44, 52, 52, 26, 26, 26, 26, 26, 24, 28, 28, 28, 28, 28, 28, 42, 68, 72]
   const startX = 18
-  let y = filterInstitutionName ? 72 : 68
+  let y = 72
 
   const drawTableHead = () => {
     doc.fontSize(6).font('Helvetica-Bold')
@@ -349,8 +357,9 @@ router.get('/report', requireAuth, async (req, res) => {
 })
 
 router.get('/:id/report', requireAuth, async (req, res) => {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
   res.setHeader('Pragma', 'no-cache')
+  res.setHeader('Expires', '0')
   const { id } = req.params
   const currentUser = (req as any).user
   const m = await prisma.measurement.findUnique({

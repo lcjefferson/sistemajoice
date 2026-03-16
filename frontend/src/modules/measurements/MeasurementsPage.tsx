@@ -63,8 +63,8 @@ export default function MeasurementsPage() {
   const [total, setTotal] = useState(0)
   const [feedback, setFeedback] = useState<{ open: boolean; message: string; type: 'success' | 'error' | 'warning' }>({ open: false, message: '', type: 'success' })
   const load = async () => {
-    const params: Record<string, string | number | undefined> = { page, pageSize, q: search || undefined }
-    if (filterInstitutionId) params.institutionId = filterInstitutionId
+    const params: Record<string, string | number | undefined> = { page, pageSize, q: search || undefined, _: Date.now() }
+    if (filterInstitutionId && String(filterInstitutionId).trim()) params.institutionId = String(filterInstitutionId).trim()
     const { data } = await api.get('/api/measurements', { params })
     setItems(data.items)
     setTotal(data.total)
@@ -100,15 +100,7 @@ export default function MeasurementsPage() {
   const [cameraOpen, setCameraOpen] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
-  const mobilePhotoInputRef = useRef<HTMLInputElement>(null)
-
-  const isMobileOrTouch = () => typeof navigator !== 'undefined' && (navigator.maxTouchPoints > 0 || /Android|webOS|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent))
-
-  const handleOpenCamera = () => {
-    if (isMobileOrTouch()) {
-      mobilePhotoInputRef.current?.click()
-      return
-    }
+  const handleOpenCameraDesktop = () => {
     if (!navigator.mediaDevices?.getUserMedia) {
       setFeedback({ open: true, message: t('common.camera_not_supported'), type: 'error' })
       return
@@ -187,7 +179,8 @@ export default function MeasurementsPage() {
         await upload(certificates, 'certificate')
       }
       
-      setOpen(false); setForm({}); setFormTime(localTimeString()); setPhotos([]); setReports([]); setCertificates([]); load()
+      setOpen(false); setForm({}); setFormTime(localTimeString()); setPhotos([]); setReports([]); setCertificates([])
+      await load()
       setFeedback({ 
         open: true, 
         message: uploadErrors > 0 
@@ -203,7 +196,7 @@ export default function MeasurementsPage() {
   const remove = async (id: string) => { await api.delete(`/api/measurements/${id}`); load() }
   const download = async (fmt: 'pdf'|'excel') => {
     const params: Record<string, string> = { format: fmt, _: String(Date.now()) }
-    if (filterInstitutionId) params.institutionId = filterInstitutionId
+    if (filterInstitutionId && String(filterInstitutionId).trim()) params.institutionId = String(filterInstitutionId).trim()
     const res = await api.get('/api/measurements/report', { params, responseType: 'blob' })
     const url = URL.createObjectURL(res.data)
     const a = document.createElement('a')
@@ -213,7 +206,7 @@ export default function MeasurementsPage() {
     URL.revokeObjectURL(url)
   }
   const downloadOne = async (id: string) => {
-    const res = await api.get(`/api/measurements/${id}/report`, { params: { _: Date.now() }, responseType: 'blob' })
+    const res = await api.get(`/api/measurements/${id}/report`, { params: { _: Date.now(), r: Math.random() }, responseType: 'blob' })
     const disp = (res.headers as any)['content-disposition'] as string | undefined
     const match = disp?.match(/filename="(.+?)"/)
     const fname = match?.[1] || `medicao_${id}.pdf`
@@ -360,21 +353,23 @@ export default function MeasurementsPage() {
             <Box sx={{ display:'grid', gap:2, mt:1, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' } }}>
               <Box>
                 <Typography variant="body2" sx={{ mb: 1 }}>{t('common.photos')}</Typography>
-                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
                   <Button variant="outlined" component="label" size="small">
                     {t('common.select_photos')}
                     <input hidden type="file" multiple accept="image/*" onChange={e=>handleFileSelect(e, setPhotos)} />
                   </Button>
-                  <input
-                    ref={mobilePhotoInputRef}
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    style={{ display: 'none' }}
-                    onChange={e => { handleFileSelect(e, setPhotos); e.target.value = '' }}
-                  />
-                  <Button variant="contained" size="small" onClick={handleOpenCamera}>
+                  <Button variant="contained" component="label" size="small">
                     {t('common.take_photo')}
+                    <input
+                      hidden
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={e => { handleFileSelect(e, setPhotos); e.target.value = '' }}
+                    />
+                  </Button>
+                  <Button variant="outlined" size="small" onClick={handleOpenCameraDesktop}>
+                    {t('common.take_photo_desktop')}
                   </Button>
                 </Box>
                 {photos.length > 0 && (

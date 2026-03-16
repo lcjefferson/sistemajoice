@@ -71,6 +71,7 @@
     "camera_error": "No se pudo acceder a la cámara",
     "photo_captured": "Foto capturada",
     "take_photo_mobile": "Tomar foto (móvil)",
+    "take_photo_desktop": "Cámara (computadora)",
     "capture": "Capturar",
     "search": "Buscar",
     "status": "Estado",
