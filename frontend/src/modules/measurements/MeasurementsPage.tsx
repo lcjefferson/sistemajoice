@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../../shared/api'
-import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Paper, TextField, Typography, FormControl, InputLabel, Select, MenuItem, Pagination, Snackbar, Alert, Chip } from '@mui/material'
+import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Paper, TextField, Typography, FormControl, InputLabel, Select, MenuItem, Snackbar, Alert, Chip } from '@mui/material'
 import { format } from 'date-fns'
 import { useTranslation } from 'react-i18next'
 
@@ -300,7 +300,22 @@ export default function MeasurementsPage() {
           </Box>
         ))}
         <Box sx={{ display:'flex', justifyContent:'center', mt:2 }}>
-          <Pagination count={Math.max(1, Math.ceil(total / pageSize))} page={page} onChange={(_,p)=>setPage(p)} color="primary" />
+          {(() => {
+            const totalPages = Math.max(1, Math.ceil(total / pageSize))
+            return (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                <Button variant="outlined" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>
+                  {t('common.previous')}
+                </Button>
+                <Typography variant="body2">
+                  {t('common.page')} {page} / {totalPages}
+                </Typography>
+                <Button variant="outlined" disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>
+                  {t('common.next')}
+                </Button>
+              </Box>
+            )
+          })()}
         </Box>
       </Paper>
       <Dialog open={open} onClose={()=>setOpen(false)} maxWidth="md" fullWidth>
