@@ -535,22 +535,73 @@ router.get('/:id/report', requireAuth, async (req, res) => {
     }
   })
 
-  // Anexos: listar como links (download)
+  const baseUrl = (process.env.BACKEND_PUBLIC_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '')
+  const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp']
+
+  // Galeria de imagens (grid 2 colunas, com quebra de página)
+  const imageFiles = (m.files || []).filter(f =>
+    f.mime?.startsWith('image/') || imageExtensions.includes(path.extname(f.name).toLowerCase())
+  )
+  const galleryImgW = 220
+  const galleryImgH = 150
+  const galleryGap = 20
+  const galleryMarginX = 50
+  const galleryCols = 2
+  const galleryRowH = galleryImgH + 22
+
+  if (imageFiles.length > 0) {
+    doc.moveDown(2)
+    if (doc.y > doc.page.height - 220) {
+      doc.addPage()
+      doc.y = 110
+    }
+    doc.fontSize(12).fillColor('black').font('Helvetica-Bold').text('Galeria de imagens')
+    doc.moveDown(0.5)
+    let startY = doc.y
+    let pageStartIndex = 0
+    for (let i = 0; i < imageFiles.length; i++) {
+      const col = (i - pageStartIndex) % galleryCols
+      const rowOnPage = Math.floor((i - pageStartIndex) / galleryCols)
+      let drawX = galleryMarginX + col * (galleryImgW + galleryGap)
+      let drawY = startY + rowOnPage * galleryRowH
+      if (drawY + galleryRowH > doc.page.height - 50) {
+        doc.addPage()
+        startY = 110
+        pageStartIndex = i
+        drawX = galleryMarginX
+        drawY = 110
+      }
+      const fullPath = path.join(uploadDir, path.basename(imageFiles[i].path))
+      if (fs.existsSync(fullPath)) {
+        try {
+          doc.image(fullPath, drawX, drawY, { width: galleryImgW, height: galleryImgH, fit: [galleryImgW, galleryImgH] })
+          doc.fontSize(8).fillColor('gray').text(imageFiles[i].name.substring(0, 38), drawX, drawY + galleryImgH + 4, { width: galleryImgW, align: 'center' })
+          doc.fillColor('black')
+        } catch (e) {
+          console.error('Erro ao inserir imagem no PDF:', e)
+        }
+      }
+    }
+    const lastRowOnPage = Math.floor((imageFiles.length - 1 - pageStartIndex) / galleryCols)
+    doc.y = startY + (lastRowOnPage + 1) * galleryRowH
+    doc.moveDown(0.5)
+  }
+
+  // Anexos: links para download (todos os arquivos)
   if (m.files && m.files.length > 0) {
     doc.moveDown(2)
     if (doc.y > doc.page.height - 100) {
       doc.addPage()
       doc.y = 110
     }
-    doc.fontSize(12).fillColor('black').font('Helvetica-Bold').text('Anexos')
+    doc.fontSize(12).fillColor('black').font('Helvetica-Bold').text('Links dos anexos')
     doc.moveDown(0.3)
     doc.font('Helvetica').fontSize(9).fillColor('gray')
-    doc.text('Clique nos links para baixar os anexos (é necessário estar logado no sistema).')
+    doc.text('Clique nos links para baixar (é necessário estar logado no sistema).')
     doc.moveDown(0.5)
     doc.fontSize(10).fillColor('black')
-    const baseUrl = (process.env.BACKEND_PUBLIC_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '')
     for (const f of m.files) {
-      if (doc.y > doc.page.height - 120) {
+      if (doc.y > doc.page.height - 80) {
         doc.addPage()
         doc.y = 110
       }
