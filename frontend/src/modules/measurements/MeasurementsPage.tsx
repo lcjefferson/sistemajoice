@@ -220,6 +220,17 @@ export default function MeasurementsPage() {
     a.remove()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
+
+  const deleteAttachment = async (measurementId: string, fileId: string) => {
+    try {
+      await api.delete(`/api/measurements/${measurementId}/files/${fileId}`)
+      await load()
+      setFeedback({ open: true, message: t('common.success'), type: 'success' })
+    } catch (e) {
+      console.error(e)
+      setFeedback({ open: true, message: t('common.error'), type: 'error' })
+    }
+  }
   return (
     <Box>
       <Paper sx={{ p:2, mb:2 }}>
@@ -270,7 +281,17 @@ export default function MeasurementsPage() {
                           <img src={fullUrl} alt={f.name} style={{ maxWidth: 80, maxHeight: 60, objectFit: 'cover', border: '1px solid #ccc', borderRadius: 4 }} />
                         </a>
                       ) : null}
-                      <Button size="small" href={fullUrl} target="_blank" rel="noopener noreferrer" sx={{ color: 'primary.main' }}>{(f as any).category ? `[${(f as any).category}] ` : ''}{f.name}</Button>
+                      <Button size="small" href={fullUrl} target="_blank" rel="noopener noreferrer" sx={{ color: 'primary.main' }}>
+                        {(f as any).category ? `[${(f as any).category}] ` : ''}{f.name}
+                      </Button>
+                      <Button
+                        size="small"
+                        color="error"
+                        onClick={() => deleteAttachment(m.id, f.id)}
+                        sx={{ minWidth: 0 }}
+                      >
+                        {t('common.delete')}
+                      </Button>
                     </Box>
                   )
                 })}

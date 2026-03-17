@@ -17,6 +17,32 @@ router.get('/', requireAuth, async (req, res) => {
   }
 })
 
+router.patch('/:id/read', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params
+    const { read } = req.body as { read?: boolean }
+    const updated = await prisma.contactMessage.update({
+      where: { id },
+      data: { read: Boolean(read) }
+    })
+    res.json({ ok: true, message: updated })
+  } catch (error) {
+    console.error('Error updating message:', error)
+    res.status(500).json({ message: 'Erro ao atualizar mensagem' })
+  }
+})
+
+router.delete('/:id', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params
+    await prisma.contactMessage.delete({ where: { id } })
+    res.json({ ok: true })
+  } catch (error) {
+    console.error('Error deleting message:', error)
+    res.status(500).json({ message: 'Erro ao excluir mensagem' })
+  }
+})
+
 router.post('/', async (req, res) => {
   const { name, email, message, type } = req.body
 

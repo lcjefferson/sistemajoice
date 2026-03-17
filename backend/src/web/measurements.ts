@@ -95,6 +95,21 @@ router.post('/:id/files', requireAuth, upload.array('files', 20), async (req, re
   res.json({ files: created })
 })
 
+router.delete('/:measurementId/files/:fileId', requireAuth, async (req, res) => {
+  const { measurementId, fileId } = req.params
+  const f = await prisma.file.findFirst({ where: { id: fileId, measurementId } })
+  if (!f) return res.status(404).json({ message: 'Anexo não encontrado' })
+  // tenta remover arquivo físico (se existir)
+  try {
+    const fullPath = path.join(uploadDir, path.basename(f.path))
+    if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath)
+  } catch (e) {
+    console.error('Erro ao remover arquivo físico:', e)
+  }
+  await prisma.file.delete({ where: { id: f.id } })
+  res.json({ ok: true })
+})
+
 router.get('/bi', requireAuth, async (req, res) => {
   const { institutionId, sectorId, from, to, status } = req.query as any
   const where: any = {}
@@ -268,10 +283,11 @@ router.get('/report', requireAuth, async (req, res) => {
   }
 
   const drawFooter = () => {
+    const toBR = (d: Date) => d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
     const bottom = doc.page.height - 30
     doc.fontSize(8)
     doc.text(
-      `${systemName} - ${slogan} | Gerado em: ${new Date().toLocaleString('pt-BR')}`,
+      `${systemName} - ${slogan} | Gerado em: ${toBR(new Date())}`,
       20,
       bottom,
       { align: 'center', width: doc.page.width - 40 }
@@ -519,7 +535,7 @@ router.get('/:id/report', requireAuth, async (req, res) => {
     }
   })
 
-  // Anexos: incluir imagens no PDF e listar Laudos/Certificados como links
+  // Anexos: listar como links (download)
   if (m.files && m.files.length > 0) {
     doc.moveDown(2)
     if (doc.y > doc.page.height - 100) {
@@ -529,32 +545,17 @@ router.get('/:id/report', requireAuth, async (req, res) => {
     doc.fontSize(12).fillColor('black').font('Helvetica-Bold').text('Anexos')
     doc.moveDown(0.3)
     doc.font('Helvetica').fontSize(9).fillColor('gray')
-    doc.text('Para abrir Laudos e Certificados em PDF: copie o link abaixo e abra no navegador (é necessário estar logado no sistema).')
+    doc.text('Clique nos links para baixar os anexos (é necessário estar logado no sistema).')
     doc.moveDown(0.5)
     doc.fontSize(10).fillColor('black')
     const baseUrl = (process.env.BACKEND_PUBLIC_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '')
-    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp']
     for (const f of m.files) {
       if (doc.y > doc.page.height - 120) {
         doc.addPage()
         doc.y = 110
       }
-      const ext = path.extname(f.name).toLowerCase()
-      const isImage = f.mime?.startsWith('image/') || imageExtensions.includes(ext)
-      const fullPath = path.join(uploadDir, path.basename(f.path))
-      if (isImage && fs.existsSync(fullPath)) {
-        try {
-          doc.text(f.name, { continued: false })
-          doc.image(fullPath, 50, doc.y + 5, { width: 180, height: 120, fit: [180, 120] })
-          doc.y += 130
-        } catch (e) {
-          doc.fillColor('blue').text(f.name, { link: `${baseUrl}${f.path}`, underline: true }).fillColor('black')
-          doc.moveDown(0.5)
-        }
-      } else {
-        doc.fillColor('blue').text(f.name, { link: `${baseUrl}${f.path}`, underline: true }).fillColor('black')
-        doc.moveDown(0.5)
-      }
+      doc.fillColor('blue').text(f.name, { link: `${baseUrl}${f.path}`, underline: true }).fillColor('black')
+      doc.moveDown(0.5)
     }
   }
 

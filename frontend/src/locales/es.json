@@ -136,6 +136,10 @@
     "email": "Correo electrónico",
     "type": "Tipo",
     "message": "Mensaje",
+    "read": "Leído",
+    "unread": "No leído",
+    "mark_read": "Marcar como leído",
+    "mark_unread": "Marcar como no leído",
     "no_messages": "No se encontraron mensajes"
   },
   "contact": {

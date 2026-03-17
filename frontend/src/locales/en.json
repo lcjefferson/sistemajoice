@@ -141,6 +141,10 @@
     "email": "Email",
     "type": "Type",
     "message": "Message",
+    "read": "Read",
+    "unread": "Unread",
+    "mark_read": "Mark as read",
+    "mark_unread": "Mark as unread",
     "no_messages": "No messages found"
   },
   "contact": {

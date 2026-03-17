@@ -141,6 +141,10 @@
     "email": "E-mail",
     "type": "Tipo",
     "message": "Mensagem",
+    "read": "Lida",
+    "unread": "Não lida",
+    "mark_read": "Marcar como lida",
+    "mark_unread": "Marcar como não lida",
     "no_messages": "Nenhuma mensagem encontrada"
   },
   "contact": {
