@@ -384,6 +384,42 @@ export default function MeasurementsPage() {
             )}
           </Box>
           <TextField label={t('common.comments')} multiline rows={3} fullWidth sx={{ mt:2 }} value={form.comments||''} onChange={e=>setForm({ ...form, comments: e.target.value })} />
+
+          {form.id && (form.files?.length || 0) > 0 && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>{t('common.existing_attachments')}</Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1, alignItems: 'center' }}>
+                {(form.files || []).map(f => {
+                  const fullUrl = `${api.defaults.baseURL}${f.path}`
+                  const isImage = (f.mime || '').startsWith('image/')
+                  return (
+                    <Box key={f.id} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
+                      {isImage ? (
+                        <a href={fullUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
+                          <img src={fullUrl} alt={f.name} style={{ maxWidth: 100, maxHeight: 70, objectFit: 'cover', border: '1px solid #ccc', borderRadius: 4 }} />
+                        </a>
+                      ) : null}
+                      <Button size="small" href={fullUrl} target="_blank" rel="noopener noreferrer" sx={{ color: 'primary.main' }}>
+                        {(f as any).category ? `[${(f as any).category}] ` : ''}{f.name}
+                      </Button>
+                      <Button
+                        size="small"
+                        color="error"
+                        onClick={async () => {
+                          await deleteAttachment(String(form.id), f.id)
+                          setForm(prev => ({ ...prev, files: (prev.files || []).filter(x => x.id !== f.id) }))
+                        }}
+                        sx={{ minWidth: 0 }}
+                      >
+                        {t('common.delete')}
+                      </Button>
+                    </Box>
+                  )
+                })}
+              </Box>
+            </Box>
+          )}
+
           <Box sx={{ mt:3 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>{t('common.attachments')}</Typography>
             <Box sx={{ display:'grid', gap:2, mt:1, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' } }}>
