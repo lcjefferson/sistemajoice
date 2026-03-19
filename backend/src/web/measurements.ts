@@ -128,12 +128,12 @@ router.get('/bi', requireAuth, async (req, res) => {
       if (m.humidity >= limits.humidityMin && m.humidity <= limits.humidityMax) newItem.humidity = 0
       if (m.fungiInternal < limits.fungiInternal && m.ieRatio <= limits.ieMax) { newItem.fungiInternal = 0; newItem.fungiExternal = 0; newItem.ieRatio = 0 }
       if (m.bacteriaInternal < limits.bacteriaInternal && bacteriaRatio <= limits.ieMax) { newItem.bacteriaInternal = 0; newItem.bacteriaExternal = 0 }
-      if ((m.co2Internal - m.co2External) <= 700) { newItem.co2Internal = 0; newItem.co2External = 0 }
+      if ((m.co2Internal - m.co2External) <= limits.co2DiffMax) { newItem.co2Internal = 0; newItem.co2External = 0 }
       if (m.pm10 <= limits.pm10) newItem.pm10 = 0
       if (m.pm25 <= limits.pm25) newItem.pm25 = 0
       
-      // Air speed is not a compliance indicator in the thesis Status_Geral
-      newItem.airSpeed = 0
+      // Keep only non-compliant values when filtering "Não Conforme"
+      if (m.airSpeed <= limits.airSpeedMax) newItem.airSpeed = 0
       
       return newItem
     })
@@ -337,6 +337,10 @@ router.get('/report', requireAuth, async (req, res) => {
     const coord = i.latitude && i.longitude ? `${i.latitude.toFixed(3)}, ${i.longitude.toFixed(3)}` : '-'
     const obs = ((i as any).comments || '').substring(0, 20)
     const idShort = i.id.slice(-6).toUpperCase()
+    const bacteriaRatio = i.bacteriaExternal === 0 ? 0 : i.bacteriaInternal / i.bacteriaExternal
+    const co2Diff = i.co2Internal - i.co2External
+    const fungiOk = i.fungiInternal < limits.fungiInternal && i.ieRatio <= limits.ieMax
+    const bacteriaOk = i.bacteriaInternal < limits.bacteriaInternal && bacteriaRatio <= limits.ieMax
 
     const row = [
       idShort,
@@ -360,12 +364,31 @@ router.get('/report', requireAuth, async (req, res) => {
       obs
     ]
 
+    // Índices de coluna do relatório geral que devem ficar em vermelho se não conformes
+    const nonCompliantByCol: Record<number, boolean> = {
+      4: !(i.temperature >= limits.temperatureMin && i.temperature <= limits.temperatureMax), // Temp
+      5: !(i.humidity >= limits.humidityMin && i.humidity <= limits.humidityMax), // Umidade
+      6: !(i.airSpeed <= limits.airSpeedMax), // Vel.Ar
+      7: !fungiOk, // F.Int
+      8: !fungiOk, // F.Ext
+      9: !(i.ieRatio <= limits.ieMax), // I/E
+      10: !bacteriaOk, // B.Int
+      11: !bacteriaOk, // B.Ext
+      12: !(co2Diff <= limits.co2DiffMax), // CO2.I
+      13: !(co2Diff <= limits.co2DiffMax), // CO2.E
+      14: !(i.pm10 <= limits.pm10), // PM10
+      15: !(i.pm25 <= limits.pm25), // PM2.5
+      16: i.status !== 'Conforme' // Status
+    }
+
     doc.fontSize(5)
     let x = startX
     row.forEach((cell, idx) => {
+      doc.fillColor(nonCompliantByCol[idx] ? '#D32F2F' : 'black')
       doc.text(String(cell).substring(0, 14), x, y, { width: widths[idx], align: 'left' })
       x += widths[idx]
     })
+    doc.fillColor('black')
     y += 10
   }
 
@@ -479,21 +502,71 @@ router.get('/:id/report', requireAuth, async (req, res) => {
 
   const coord = m.latitude && m.longitude ? `${m.latitude.toFixed(4)}, ${m.longitude.toFixed(4)}` : 'Não registrado'
 
-  const rows: [string, string][] = [
-    ['Temperatura (C)', String(m.temperature)],
-    ['Umidade (%)', String(m.humidity)],
-    ['Velocidade do ar (m/s)', String(m.airSpeed)],
-    ['Fungos Internos (UFC/m3)', String(m.fungiInternal)],
-    ['Fungos Externos (UFC/m3)', String(m.fungiExternal)],
-    ['Relação I/E', String(m.ieRatio)],
-    ['Bactérias Internas (UFC/m3)', String(m.bacteriaInternal)],
-    ['Bactérias Externas (UFC/m3)', String(m.bacteriaExternal)],
-    ['CO2 Interno (ppm)', String(m.co2Internal)],
-    ['CO2 Externo (ppm)', String(m.co2External)],
-    ['PM10 (ug/m3)', String(m.pm10)],
-    ['PM2.5 (ug/m3)', String(m.pm25)],
-    ['Localização', coord],
-    ['Comentários', (m as any).comments || '-']
+  const bacteriaRatio = m.bacteriaExternal === 0 ? 0 : m.bacteriaInternal / m.bacteriaExternal
+  const co2Diff = m.co2Internal - m.co2External
+  const rows: Array<{ label: string; value: string; nonCompliant?: boolean }> = [
+    {
+      label: 'Temperatura (C)',
+      value: String(m.temperature),
+      nonCompliant: !(m.temperature >= limits.temperatureMin && m.temperature <= limits.temperatureMax)
+    },
+    {
+      label: 'Umidade (%)',
+      value: String(m.humidity),
+      nonCompliant: !(m.humidity >= limits.humidityMin && m.humidity <= limits.humidityMax)
+    },
+    {
+      label: 'Velocidade do ar (m/s)',
+      value: String(m.airSpeed),
+      nonCompliant: !(m.airSpeed <= limits.airSpeedMax)
+    },
+    {
+      label: 'Fungos Internos (UFC/m3)',
+      value: String(m.fungiInternal),
+      nonCompliant: !(m.fungiInternal < limits.fungiInternal && m.ieRatio <= limits.ieMax)
+    },
+    {
+      label: 'Fungos Externos (UFC/m3)',
+      value: String(m.fungiExternal),
+      nonCompliant: !(m.fungiInternal < limits.fungiInternal && m.ieRatio <= limits.ieMax)
+    },
+    {
+      label: 'Relação I/E',
+      value: String(m.ieRatio),
+      nonCompliant: !(m.ieRatio <= limits.ieMax)
+    },
+    {
+      label: 'Bactérias Internas (UFC/m3)',
+      value: String(m.bacteriaInternal),
+      nonCompliant: !(m.bacteriaInternal < limits.bacteriaInternal && bacteriaRatio <= limits.ieMax)
+    },
+    {
+      label: 'Bactérias Externas (UFC/m3)',
+      value: String(m.bacteriaExternal),
+      nonCompliant: !(m.bacteriaInternal < limits.bacteriaInternal && bacteriaRatio <= limits.ieMax)
+    },
+    {
+      label: 'CO2 Interno (ppm)',
+      value: String(m.co2Internal),
+      nonCompliant: !(co2Diff <= limits.co2DiffMax)
+    },
+    {
+      label: 'CO2 Externo (ppm)',
+      value: String(m.co2External),
+      nonCompliant: !(co2Diff <= limits.co2DiffMax)
+    },
+    {
+      label: 'PM10 (ug/m3)',
+      value: String(m.pm10),
+      nonCompliant: !(m.pm10 <= limits.pm10)
+    },
+    {
+      label: 'PM2.5 (ug/m3)',
+      value: String(m.pm25),
+      nonCompliant: !(m.pm25 <= limits.pm25)
+    },
+    { label: 'Localização', value: coord, nonCompliant: false },
+    { label: 'Comentários', value: (m as any).comments || '-', nonCompliant: false }
   ]
 
   // Configuração da tabela
@@ -513,7 +586,7 @@ router.get('/:id/report', requireAuth, async (req, res) => {
 
   // Linhas da tabela
   doc.font('Helvetica').fontSize(10)
-  rows.forEach(([param, value], index) => {
+  rows.forEach(({ label, value, nonCompliant }, index) => {
     const cellY = doc.y
     // Fundo alternado
     if (index % 2 === 0) {
@@ -521,10 +594,10 @@ router.get('/:id/report', requireAuth, async (req, res) => {
     }
     
     doc.fillColor('black')
-    // Bordas (opcional, aqui usando apenas linhas finas se quiser, mas fundo alternado ajuda)
-    // Vamos desenhar o texto
-    doc.text(param, startX + 10, cellY + 5)
+    doc.text(label, startX + 10, cellY + 5)
+    doc.fillColor(nonCompliant ? '#D32F2F' : 'black')
     doc.text(value, startX + col1Width + 10, cellY + 5)
+    doc.fillColor('black')
     
     doc.y = cellY + rowHeight
     
