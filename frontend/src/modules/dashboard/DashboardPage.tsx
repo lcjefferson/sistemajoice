@@ -60,9 +60,12 @@ export default function DashboardPage() {
 
   const checkCompliance = (key: string, val: number, m?: any) => {
     if (!limits || val === undefined || val === null) return 'unknown'
-    const fungiOk = m
-      ? (m.fungiInternal < limits.fungiInternal && m.ieRatio <= limits.ieMax)
+    const fungiInternalOk = m
+      ? (m.fungiInternal < limits.fungiInternal)
       : (val < limits.fungiInternal)
+    const fungiRatioOk = m
+      ? (m.ieRatio <= limits.ieMax)
+      : (val <= limits.ieMax)
     const bacteriaRatio = m?.bacteriaExternal === 0 ? 0 : (m?.bacteriaInternal / m?.bacteriaExternal)
     const bacteriaOk = m
       ? (m.bacteriaInternal < limits.bacteriaInternal && bacteriaRatio <= limits.ieMax)
@@ -71,12 +74,17 @@ export default function DashboardPage() {
 
     if (key === 'temperature') return (val >= limits.temperatureMin && val <= limits.temperatureMax) ? 'ok' : 'nok'
     if (key === 'humidity') return (val >= limits.humidityMin && val <= limits.humidityMax) ? 'ok' : 'nok'
-    if (key === 'airSpeed') return val <= (limits.airSpeedMax ?? limits.airSpeed ?? 0.2) ? 'ok' : 'nok'
-    if (key === 'fungiInternal') return fungiOk ? 'ok' : 'nok'
-    if (key === 'fungiExternal') return fungiOk ? 'ok' : 'nok'
+    if (key === 'airSpeed') {
+      const speedLimit = (limits.airSpeedMax ?? limits.airSpeed ?? 0.2)
+      // Para a dashboard, considere não conforme se houver qualquer ocorrência acima do limite no período filtrado.
+      const hasAnyAboveLimit = series.some(s => Number(s.airSpeed) > speedLimit)
+      return hasAnyAboveLimit ? 'nok' : (val <= speedLimit ? 'ok' : 'nok')
+    }
+    if (key === 'fungiInternal') return fungiInternalOk ? 'ok' : 'nok'
+    if (key === 'fungiExternal') return fungiRatioOk ? 'ok' : 'nok'
     if (key === 'ieRatio') return val <= limits.ieMax ? 'ok' : 'nok'
     if (key === 'bacteriaInternal') return bacteriaOk ? 'ok' : 'nok'
-    if (key === 'bacteriaExternal') return bacteriaOk ? 'ok' : 'nok'
+    if (key === 'bacteriaExternal') return 'ok'
     if (key === 'co2Internal') {
       return co2Diff <= (limits.co2DiffMax ?? 700) ? 'ok' : 'nok'
     }
@@ -84,6 +92,20 @@ export default function DashboardPage() {
     if (key === 'pm10') return val <= limits.pm10 ? 'ok' : 'nok'
     if (key === 'pm25') return val <= limits.pm25 ? 'ok' : 'nok'
     return 'unknown'
+  }
+
+  const measurementCompliance = (key: string, measurement: any) => {
+    const val = Number(measurement?.[key])
+    return checkCompliance(key, val, measurement)
+  }
+
+  const cardCompliance = (key: string, avgVal: number, context: any) => {
+    // Regra da dashboard: se houver qualquer ocorrência fora do limite no período filtrado, o card fica "Não Conforme"
+    if (Array.isArray(series) && series.length > 0) {
+      const hasAnyNonCompliant = series.some(s => measurementCompliance(key, s) === 'nok')
+      if (hasAnyNonCompliant) return 'nok'
+    }
+    return checkCompliance(key, avgVal, context)
   }
 
   return (
@@ -143,7 +165,7 @@ export default function DashboardPage() {
                 fungiExternal: kpis.fungiExternalAvg,
                 ieRatio: kpis.ieRatioAvg
               }
-              const status = checkCompliance(p.key, avgVal, context)
+              const status = cardCompliance(p.key, avgVal, context)
               return (
                 <Grid item xs={12} md={6} lg={4} key={p.key}>
                   <Paper sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>

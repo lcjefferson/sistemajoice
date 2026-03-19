@@ -123,11 +123,19 @@ router.get('/bi', requireAuth, async (req, res) => {
     items = items.map(m => {
       const newItem = { ...m }
       const bacteriaRatio = m.bacteriaExternal === 0 ? 0 : m.bacteriaInternal / m.bacteriaExternal
+      const fungiInternalOk = m.fungiInternal < limits.fungiInternal
+      const fungiRatioOk = m.ieRatio <= limits.ieMax
+      const bacteriaInternalOk = m.bacteriaInternal < limits.bacteriaInternal
+      const bacteriaRatioOk = bacteriaRatio <= limits.ieMax
       
       if (m.temperature >= limits.temperatureMin && m.temperature <= limits.temperatureMax) newItem.temperature = 0
       if (m.humidity >= limits.humidityMin && m.humidity <= limits.humidityMax) newItem.humidity = 0
-      if (m.fungiInternal < limits.fungiInternal && m.ieRatio <= limits.ieMax) { newItem.fungiInternal = 0; newItem.fungiExternal = 0; newItem.ieRatio = 0 }
-      if (m.bacteriaInternal < limits.bacteriaInternal && bacteriaRatio <= limits.ieMax) { newItem.bacteriaInternal = 0; newItem.bacteriaExternal = 0 }
+      // Fungo externo não possui limite máximo absoluto: só IE e fungo interno entram na conformidade
+      if (fungiInternalOk) newItem.fungiInternal = 0
+      if (fungiRatioOk) { newItem.fungiExternal = 0; newItem.ieRatio = 0 }
+      // Bactéria externa não possui limite máximo absoluto: só relação I/E e bactéria interna
+      if (bacteriaInternalOk) newItem.bacteriaInternal = 0
+      if (bacteriaRatioOk) newItem.bacteriaExternal = 0
       if ((m.co2Internal - m.co2External) <= limits.co2DiffMax) { newItem.co2Internal = 0; newItem.co2External = 0 }
       if (m.pm10 <= limits.pm10) newItem.pm10 = 0
       if (m.pm25 <= limits.pm25) newItem.pm25 = 0
@@ -339,7 +347,8 @@ router.get('/report', requireAuth, async (req, res) => {
     const idShort = i.id.slice(-6).toUpperCase()
     const bacteriaRatio = i.bacteriaExternal === 0 ? 0 : i.bacteriaInternal / i.bacteriaExternal
     const co2Diff = i.co2Internal - i.co2External
-    const fungiOk = i.fungiInternal < limits.fungiInternal && i.ieRatio <= limits.ieMax
+    const fungiInternalOk = i.fungiInternal < limits.fungiInternal
+    const fungiRatioOk = i.ieRatio <= limits.ieMax
     const bacteriaOk = i.bacteriaInternal < limits.bacteriaInternal && bacteriaRatio <= limits.ieMax
 
     const row = [
@@ -369,11 +378,11 @@ router.get('/report', requireAuth, async (req, res) => {
       4: !(i.temperature >= limits.temperatureMin && i.temperature <= limits.temperatureMax), // Temp
       5: !(i.humidity >= limits.humidityMin && i.humidity <= limits.humidityMax), // Umidade
       6: !(i.airSpeed <= limits.airSpeedMax), // Vel.Ar
-      7: !fungiOk, // F.Int
-      8: !fungiOk, // F.Ext
-      9: !(i.ieRatio <= limits.ieMax), // I/E
+      7: !fungiInternalOk, // F.Int
+      8: !fungiRatioOk, // F.Ext (externo não tem limite máximo; só IE)
+      9: !fungiRatioOk, // I/E
       10: !bacteriaOk, // B.Int
-      11: !bacteriaOk, // B.Ext
+      11: false, // B.Ext (externo não possui limite máximo absoluto)
       12: !(co2Diff <= limits.co2DiffMax), // CO2.I
       13: !(co2Diff <= limits.co2DiffMax), // CO2.E
       14: !(i.pm10 <= limits.pm10), // PM10
@@ -523,12 +532,12 @@ router.get('/:id/report', requireAuth, async (req, res) => {
     {
       label: 'Fungos Internos (UFC/m3)',
       value: String(m.fungiInternal),
-      nonCompliant: !(m.fungiInternal < limits.fungiInternal && m.ieRatio <= limits.ieMax)
+      nonCompliant: !(m.fungiInternal < limits.fungiInternal)
     },
     {
       label: 'Fungos Externos (UFC/m3)',
       value: String(m.fungiExternal),
-      nonCompliant: !(m.fungiInternal < limits.fungiInternal && m.ieRatio <= limits.ieMax)
+      nonCompliant: !(m.ieRatio <= limits.ieMax)
     },
     {
       label: 'Relação I/E',
@@ -543,7 +552,7 @@ router.get('/:id/report', requireAuth, async (req, res) => {
     {
       label: 'Bactérias Externas (UFC/m3)',
       value: String(m.bacteriaExternal),
-      nonCompliant: !(m.bacteriaInternal < limits.bacteriaInternal && bacteriaRatio <= limits.ieMax)
+      nonCompliant: false
     },
     {
       label: 'CO2 Interno (ppm)',
