@@ -81,14 +81,14 @@ export default function DashboardPage() {
       return hasAnyAboveLimit ? 'nok' : (val <= speedLimit ? 'ok' : 'nok')
     }
     if (key === 'fungiInternal') return fungiInternalOk ? 'ok' : 'nok'
-    if (key === 'fungiExternal') return fungiRatioOk ? 'ok' : 'nok'
+    if (key === 'fungiExternal') return 'ok'
     if (key === 'ieRatio') return val <= limits.ieMax ? 'ok' : 'nok'
     if (key === 'bacteriaInternal') return bacteriaOk ? 'ok' : 'nok'
     if (key === 'bacteriaExternal') return 'ok'
     if (key === 'co2Internal') {
       return co2Diff <= (limits.co2DiffMax ?? 700) ? 'ok' : 'nok'
     }
-    if (key === 'co2External') return co2Diff <= (limits.co2DiffMax ?? 700) ? 'ok' : 'nok'
+    if (key === 'co2External') return 'ok'
     if (key === 'pm10') return val <= limits.pm10 ? 'ok' : 'nok'
     if (key === 'pm25') return val <= limits.pm25 ? 'ok' : 'nok'
     return 'unknown'

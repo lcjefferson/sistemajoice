@@ -182,6 +182,7 @@ router.get('/bi', requireAuth, async (req, res) => {
 })
 
 router.get('/report', requireAuth, async (req, res) => {
+  const currentUser = (req as any).user
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
   res.setHeader('Pragma', 'no-cache')
   res.setHeader('Expires', '0')
@@ -269,6 +270,7 @@ router.get('/report', requireAuth, async (req, res) => {
   const logoPath = path.join(process.cwd(), '../frontend/public/logo.png')
   const systemName = 'Air Watch'
   const slogan = 'Qualidade do Ar Interior - Monitoramento e Gestão'
+  const toBR = (d: Date) => d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
 
   let pageNumber = 1
 
@@ -379,12 +381,12 @@ router.get('/report', requireAuth, async (req, res) => {
       5: !(i.humidity >= limits.humidityMin && i.humidity <= limits.humidityMax), // Umidade
       6: !(i.airSpeed <= limits.airSpeedMax), // Vel.Ar
       7: !fungiInternalOk, // F.Int
-      8: !fungiRatioOk, // F.Ext (externo não tem limite máximo; só IE)
+      8: false, // F.Ext (externo não tem limite máximo absoluto)
       9: !fungiRatioOk, // I/E
       10: !bacteriaOk, // B.Int
       11: false, // B.Ext (externo não possui limite máximo absoluto)
       12: !(co2Diff <= limits.co2DiffMax), // CO2.I
-      13: !(co2Diff <= limits.co2DiffMax), // CO2.E
+      13: false, // CO2.E (externo não tem limite absoluto)
       14: !(i.pm10 <= limits.pm10), // PM10
       15: !(i.pm25 <= limits.pm25), // PM2.5
       16: i.status !== 'Conforme' // Status
@@ -400,6 +402,22 @@ router.get('/report', requireAuth, async (req, res) => {
     doc.fillColor('black')
     y += 10
   }
+
+  // Validação do relatório geral
+  if (y > doc.page.height - 90) {
+    doc.addPage()
+    y = 80
+    drawHeader()
+    drawFooter()
+  }
+  doc.fontSize(9).fillColor('black').font('Helvetica-Bold')
+  doc.text('Validação do relatório', startX, y + 6)
+  doc.moveDown(0.2)
+  doc.font('Helvetica').fontSize(8).fillColor('gray')
+  const userShortId = currentUser?.id ? `#${String(currentUser.id).slice(-8).toUpperCase()}` : 'N/A'
+  doc.text('Documento gerado eletronicamente pelo sistema Air Watch.', startX, y + 20)
+  doc.text(`Emitido por: ${currentUser?.name ?? currentUser?.email ?? 'N/A'} (ID usuário: ${userShortId}) em ${toBR(new Date())}.`, startX, y + 32)
+  doc.text('Este relatório constitui registro técnico das medições listadas.', startX, y + 44)
 
   doc.end()
 })
@@ -537,7 +555,7 @@ router.get('/:id/report', requireAuth, async (req, res) => {
     {
       label: 'Fungos Externos (UFC/m3)',
       value: String(m.fungiExternal),
-      nonCompliant: !(m.ieRatio <= limits.ieMax)
+      nonCompliant: false
     },
     {
       label: 'Relação I/E',
@@ -562,7 +580,7 @@ router.get('/:id/report', requireAuth, async (req, res) => {
     {
       label: 'CO2 Externo (ppm)',
       value: String(m.co2External),
-      nonCompliant: !(co2Diff <= limits.co2DiffMax)
+      nonCompliant: false
     },
     {
       label: 'PM10 (ug/m3)',
