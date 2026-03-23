@@ -18,6 +18,36 @@ const storage = multer.diskStorage({
 })
 const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } })
 
+function getComputedStatus(m: {
+  humidity: number
+  airSpeed: number
+  temperature: number
+  fungiInternal: number
+  fungiExternal: number
+  ieRatio: number
+  bacteriaInternal: number
+  bacteriaExternal: number
+  co2Internal: number
+  co2External: number
+  pm10: number
+  pm25: number
+}) {
+  return computeStatus({
+    humidity: Number(m.humidity),
+    airSpeed: Number(m.airSpeed),
+    temperature: Number(m.temperature),
+    fungiInternal: Number(m.fungiInternal),
+    fungiExternal: Number(m.fungiExternal),
+    ieRatio: Number(m.ieRatio),
+    bacteriaInternal: Number(m.bacteriaInternal),
+    bacteriaExternal: Number(m.bacteriaExternal),
+    co2Internal: Number(m.co2Internal),
+    co2External: Number(m.co2External),
+    pm10: Number(m.pm10),
+    pm25: Number(m.pm25)
+  })
+}
+
 router.get('/', requireAuth, async (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
   res.setHeader('Pragma', 'no-cache')
@@ -45,7 +75,8 @@ router.get('/', requireAuth, async (req, res) => {
     }),
     prisma.measurement.count({ where })
   ])
-  res.json({ items, total, page, pageSize })
+  const computedItems = items.map(i => ({ ...i, status: getComputedStatus(i) }))
+  res.json({ items: computedItems, total, page, pageSize })
 })
 
 router.post('/', requireAuth, async (req, res) => {
@@ -110,14 +141,28 @@ router.delete('/:measurementId/files/:fileId', requireAuth, async (req, res) => 
   res.json({ ok: true })
 })
 
+// Recalcula status de todas as medições com a regra atual (útil após mudanças de lógica)
+router.post('/recompute-statuses', requireAuth, async (_req, res) => {
+  const all = await prisma.measurement.findMany()
+  const updates = all.map(m =>
+    prisma.measurement.update({
+      where: { id: m.id },
+      data: { status: getComputedStatus(m) }
+    })
+  )
+  await prisma.$transaction(updates)
+  res.json({ ok: true, updated: updates.length })
+})
+
 router.get('/bi', requireAuth, async (req, res) => {
   const { institutionId, sectorId, from, to, status } = req.query as any
   const where: any = {}
   if (institutionId) where.institutionId = institutionId
   if (sectorId) where.sectorId = sectorId
-  if (status) where.status = status
   if (from || to) where.date = { gte: from ? new Date(from) : undefined, lte: to ? new Date(to) : undefined }
   let items = await prisma.measurement.findMany({ where, orderBy: { date: 'asc' } })
+  items = items.map(i => ({ ...i, status: getComputedStatus(i) as any }))
+  if (status) items = items.filter(i => i.status === status)
 
   if (status === 'Não Conforme') {
     items = items.map(m => {
@@ -246,7 +291,7 @@ router.get('/report', requireAuth, async (req, res) => {
         i.co2External,
         i.pm10,
         i.pm25,
-        i.status,
+        getComputedStatus(i),
         i.latitude,
         i.longitude,
         (i as any).comments || ''
@@ -353,6 +398,7 @@ router.get('/report', requireAuth, async (req, res) => {
     const fungiRatioOk = i.ieRatio <= limits.ieMax
     const bacteriaOk = i.bacteriaInternal < limits.bacteriaInternal && bacteriaRatio <= limits.ieMax
 
+    const computedStatus = getComputedStatus(i)
     const row = [
       idShort,
       s,
@@ -370,7 +416,7 @@ router.get('/report', requireAuth, async (req, res) => {
       String(i.co2External),
       String(i.pm10),
       String(i.pm25),
-      i.status,
+      computedStatus,
       coord,
       obs
     ]
@@ -389,7 +435,7 @@ router.get('/report', requireAuth, async (req, res) => {
       13: false, // CO2.E (externo não tem limite absoluto)
       14: !(i.pm10 <= limits.pm10), // PM10
       15: !(i.pm25 <= limits.pm25), // PM2.5
-      16: i.status !== 'Conforme' // Status
+      16: computedStatus !== 'Conforme' // Status
     }
 
     doc.fontSize(5)
@@ -509,13 +555,14 @@ router.get('/:id/report', requireAuth, async (req, res) => {
   doc.moveDown(0.5)
   const stamp = toBR(new Date(m.date))
   const shortId = `#${m.id.slice(-8).toUpperCase()}`
+  const computedStatus = getComputedStatus(m)
 
   doc.font('Helvetica').fontSize(10)
   doc.text(`Data/Hora: ${stamp}`)
   doc.text(`Instituição: ${m.institution?.name ?? m.institutionId}`)
   doc.text(`Setor: ${m.sector?.name ?? m.sectorId}`)
   doc.text(`Responsável pela medição: ${m.user?.name ?? m.userId}`)
-  doc.text(`Status Global: ${m.status}`)
+  doc.text(`Status Global: ${computedStatus}`)
   doc.text(`ID da medição: ${shortId}`)
   doc.moveDown(1)
   doc.fontSize(9).fillColor('gray')
