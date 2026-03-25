@@ -60,35 +60,20 @@ export default function DashboardPage() {
 
   const checkCompliance = (key: string, val: number, m?: any) => {
     if (!limits || val === undefined || val === null) return 'unknown'
-    const fungiInternalOk = m
-      ? (m.fungiInternal < limits.fungiInternal)
-      : (val < limits.fungiInternal)
-    const fungiRatioOk = m
-      ? (m.ieRatio <= limits.ieMax)
-      : (val <= limits.ieMax)
-    const bacteriaRatio = m?.bacteriaExternal === 0 ? 0 : (m?.bacteriaInternal / m?.bacteriaExternal)
-    const bacteriaOk = m
-      ? (m.bacteriaInternal < limits.bacteriaInternal && bacteriaRatio <= limits.ieMax)
-      : (val < limits.bacteriaInternal)
     const co2Diff = m ? (m.co2Internal - m.co2External) : 0
 
     if (key === 'temperature') return (val >= limits.temperatureMin && val <= limits.temperatureMax) ? 'ok' : 'nok'
     if (key === 'humidity') return (val >= limits.humidityMin && val <= limits.humidityMax) ? 'ok' : 'nok'
-    if (key === 'airSpeed') {
-      const speedLimit = (limits.airSpeedMax ?? limits.airSpeed ?? 0.2)
-      // Para a dashboard, considere não conforme se houver qualquer ocorrência acima do limite no período filtrado.
-      const hasAnyAboveLimit = series.some(s => Number(s.airSpeed) > speedLimit)
-      return hasAnyAboveLimit ? 'nok' : (val <= speedLimit ? 'ok' : 'nok')
-    }
-    if (key === 'fungiInternal') return fungiInternalOk ? 'ok' : 'nok'
-    if (key === 'fungiExternal') return 'ok'
+    if (key === 'airSpeed') return val <= (limits.airSpeedMax ?? limits.airSpeed ?? 0.2) ? 'ok' : 'nok'
+    if (key === 'fungiInternal') return val < limits.fungiInternal ? 'ok' : 'nok'
+    if (key === 'fungiExternal') return 'ok' // sem limite absoluto
     if (key === 'ieRatio') return val <= limits.ieMax ? 'ok' : 'nok'
-    if (key === 'bacteriaInternal') return bacteriaOk ? 'ok' : 'nok'
-    if (key === 'bacteriaExternal') return 'ok'
+    if (key === 'bacteriaInternal') return val < limits.bacteriaInternal ? 'ok' : 'nok'
+    if (key === 'bacteriaExternal') return 'ok' // sem limite absoluto
     if (key === 'co2Internal') {
       return co2Diff <= (limits.co2DiffMax ?? 700) ? 'ok' : 'nok'
     }
-    if (key === 'co2External') return 'ok'
+    if (key === 'co2External') return 'ok' // sem limite absoluto
     if (key === 'pm10') return val <= limits.pm10 ? 'ok' : 'nok'
     if (key === 'pm25') return val <= limits.pm25 ? 'ok' : 'nok'
     return 'unknown'

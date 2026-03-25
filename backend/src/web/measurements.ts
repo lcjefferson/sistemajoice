@@ -396,7 +396,7 @@ router.get('/report', requireAuth, async (req, res) => {
     const co2Diff = i.co2Internal - i.co2External
     const fungiInternalOk = i.fungiInternal < limits.fungiInternal
     const fungiRatioOk = i.ieRatio <= limits.ieMax
-    const bacteriaOk = i.bacteriaInternal < limits.bacteriaInternal && bacteriaRatio <= limits.ieMax
+    const bacteriaInternalOk = i.bacteriaInternal < limits.bacteriaInternal
 
     const computedStatus = getComputedStatus(i)
     const row = [
@@ -429,7 +429,7 @@ router.get('/report', requireAuth, async (req, res) => {
       7: !fungiInternalOk, // F.Int
       8: false, // F.Ext (externo não tem limite máximo absoluto)
       9: !fungiRatioOk, // I/E
-      10: !bacteriaOk, // B.Int
+      10: !bacteriaInternalOk, // B.Int (somente limite interno < 500)
       11: false, // B.Ext (externo não possui limite máximo absoluto)
       12: !(co2Diff <= limits.co2DiffMax), // CO2.I
       13: false, // CO2.E (externo não tem limite absoluto)
@@ -612,7 +612,7 @@ router.get('/:id/report', requireAuth, async (req, res) => {
     {
       label: 'Bactérias Internas (UFC/m3)',
       value: String(m.bacteriaInternal),
-      nonCompliant: !(m.bacteriaInternal < limits.bacteriaInternal && bacteriaRatio <= limits.ieMax)
+      nonCompliant: !(m.bacteriaInternal < limits.bacteriaInternal)
     },
     {
       label: 'Bactérias Externas (UFC/m3)',
