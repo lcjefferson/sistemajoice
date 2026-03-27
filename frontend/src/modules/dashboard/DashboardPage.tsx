@@ -109,6 +109,9 @@ export default function DashboardPage() {
     return { x: Math.max(0, Math.min(100, x)), y: Math.max(0, Math.min(100, y)) }
   }
 
+  // Silhueta simplificada do Brasil (SVG), para deixar o mapa visível mesmo com poucos pontos
+  const brazilPath = 'M136 18 L174 22 L207 44 L227 79 L232 114 L221 141 L227 168 L250 188 L248 214 L228 232 L193 236 L167 258 L131 271 L102 255 L76 227 L58 206 L48 180 L36 158 L38 126 L27 102 L35 82 L59 68 L78 45 L101 34 Z'
+
   return (
     <Box>
       <Paper sx={{ p: 1, mb: 2 }}>
@@ -293,7 +296,12 @@ export default function DashboardPage() {
                 <Typography variant="h6" gutterBottom>Mapa das Coletas (Brasil)</Typography>
                 <Box sx={{ position: 'relative', height: 300, borderRadius: 2, border: '1px solid #ddd', overflow: 'hidden', bgcolor: '#f5f8ff' }}>
                   <Box sx={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, #e8f4ff 0%, #f7fbff 100%)' }} />
-                  <Box sx={{ position: 'absolute', top: 8, left: 10, fontSize: 12, color: '#607d8b' }}>Brasil (mapa simplificado)</Box>
+                  <Box sx={{ position: 'absolute', inset: 0, p: 1.5 }}>
+                    <svg viewBox="0 0 280 290" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" aria-label="Mapa do Brasil">
+                      <path d={brazilPath} fill="#dff0d8" stroke="#7da67b" strokeWidth="2" />
+                    </svg>
+                  </Box>
+                  <Box sx={{ position: 'absolute', top: 8, left: 10, fontSize: 12, color: '#607d8b', fontWeight: 600 }}>Brasil</Box>
                   {mapPoints.map((p: any, idx: number) => {
                     const { x, y } = toMapXY(p.lat, p.lon)
                     const color = p.status === 'Conforme' ? '#4caf50' : '#f44336'
