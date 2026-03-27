@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../../shared/api'
-import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Paper, TextField, Typography, FormControl, InputLabel, Select, MenuItem, Snackbar, Alert, Chip } from '@mui/material'
+import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Paper, TextField, Typography, FormControl, InputLabel, Select, MenuItem, Snackbar, Alert } from '@mui/material'
 import { format } from 'date-fns'
 import { useTranslation } from 'react-i18next'
 
@@ -57,6 +57,9 @@ export default function MeasurementsPage() {
   const [reports, setReports] = useState<File[]>([])
   const [certificates, setCertificates] = useState<File[]>([])
   const [filterInstitutionId, setFilterInstitutionId] = useState('')
+  const [filterSectorId, setFilterSectorId] = useState('')
+  const [filterFrom, setFilterFrom] = useState('')
+  const [filterTo, setFilterTo] = useState('')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize] = useState(10)
@@ -65,6 +68,9 @@ export default function MeasurementsPage() {
   const load = async () => {
     const params: Record<string, string | number | undefined> = { page, pageSize, q: search || undefined, _: Date.now() }
     if (filterInstitutionId && String(filterInstitutionId).trim()) params.institutionId = String(filterInstitutionId).trim()
+    if (filterSectorId && String(filterSectorId).trim()) params.sectorId = String(filterSectorId).trim()
+    if (filterFrom) params.from = filterFrom
+    if (filterTo) params.to = filterTo
     const { data } = await api.get('/api/measurements', { params })
     setItems(data.items)
     setTotal(data.total)
@@ -152,7 +158,7 @@ export default function MeasurementsPage() {
   }
 
   useEffect(() => { load(); api.get('/api/institutions').then(r=>setInstitutions(r.data.items)); api.get('/api/sectors').then(r=>setSectors(r.data.items)) }, [])
-  useEffect(() => { load() }, [filterInstitutionId, page, search])
+  useEffect(() => { load() }, [filterInstitutionId, filterSectorId, filterFrom, filterTo, page, search])
   const save = async () => {
     try {
       let id = form.id
@@ -197,6 +203,9 @@ export default function MeasurementsPage() {
   const download = async (fmt: 'pdf'|'excel') => {
     const params: Record<string, string> = { format: fmt, _: String(Date.now()) }
     if (filterInstitutionId && String(filterInstitutionId).trim()) params.institutionId = String(filterInstitutionId).trim()
+    if (filterSectorId && String(filterSectorId).trim()) params.sectorId = String(filterSectorId).trim()
+    if (filterFrom) params.from = filterFrom
+    if (filterTo) params.to = filterTo
     const res = await api.get('/api/measurements/report', { params, responseType: 'blob' })
     const url = URL.createObjectURL(res.data)
     const a = document.createElement('a')
@@ -244,6 +253,33 @@ export default function MeasurementsPage() {
               {institutions.map(i => <MenuItem key={i.id} value={i.id}>{i.name}</MenuItem>)}
             </Select>
           </FormControl>
+          <FormControl size="small" sx={{ width: 200 }}>
+            <InputLabel>{t('common.sector')}</InputLabel>
+            <Select value={filterSectorId} label={t('common.sector')} onChange={(e) => setFilterSectorId(e.target.value)}>
+              <MenuItem value="">{t('common.all_sectors')}</MenuItem>
+              {sectors
+                .filter(s => !filterInstitutionId || s.institutionId === filterInstitutionId)
+                .map(s => <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>)}
+            </Select>
+          </FormControl>
+          <TextField
+            size="small"
+            label={t('common.from')}
+            type="date"
+            InputLabelProps={{ shrink: true }}
+            value={filterFrom}
+            onChange={e => setFilterFrom(e.target.value)}
+            sx={{ width: 180 }}
+          />
+          <TextField
+            size="small"
+            label={t('common.to')}
+            type="date"
+            InputLabelProps={{ shrink: true }}
+            value={filterTo}
+            onChange={e => setFilterTo(e.target.value)}
+            sx={{ width: 180 }}
+          />
           <Button variant="contained" sx={{ width: { xs: '100%', sm: 'auto' } }} onClick={() => { setForm({ date: localDateString() }); setFormTime(localTimeString()); setOpen(true) }}>{t('common.new')}</Button>
           <Button sx={{ width: { xs: '100%', sm: 'auto' } }} onClick={() => download('pdf')}>{t('common.export_pdf')}</Button>
           <Button sx={{ width: { xs: '100%', sm: 'auto' } }} onClick={() => download('excel')}>{t('common.export_excel')}</Button>
@@ -271,30 +307,17 @@ export default function MeasurementsPage() {
             <Box sx={{ mt:1 }}>
               <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>{t('common.existing_attachments')}</Typography>
               <Box sx={{ display:'flex', flexWrap:'wrap', gap:1, mb:1, alignItems: 'center' }}>
-                {(m.files||[]).map(f => {
-                  const fullUrl = `${api.defaults.baseURL}${f.path}`
-                  const isImage = (f.mime || '').startsWith('image/')
-                  return (
-                    <Box key={f.id} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
-                      {isImage ? (
-                        <a href={fullUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
-                          <img src={fullUrl} alt={f.name} style={{ maxWidth: 80, maxHeight: 60, objectFit: 'cover', border: '1px solid #ccc', borderRadius: 4 }} />
-                        </a>
-                      ) : null}
-                      <Button size="small" href={fullUrl} target="_blank" rel="noopener noreferrer" sx={{ color: 'primary.main' }}>
-                        {(f as any).category ? `[${(f as any).category}] ` : ''}{f.name}
-                      </Button>
-                      <Button
-                        size="small"
-                        color="error"
-                        onClick={() => deleteAttachment(m.id, f.id)}
-                        sx={{ minWidth: 0 }}
-                      >
-                        {t('common.delete')}
-                      </Button>
-                    </Box>
-                  )
-                })}
+                {(m.files||[]).map(f => (
+                  <Button
+                    key={f.id}
+                    size="small"
+                    color="error"
+                    variant="outlined"
+                    onClick={() => deleteAttachment(m.id, f.id)}
+                  >
+                    {t('common.delete')}
+                  </Button>
+                ))}
               </Box>
             </Box>
           </Box>
@@ -389,33 +412,20 @@ export default function MeasurementsPage() {
             <Box sx={{ mt: 2 }}>
               <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>{t('common.existing_attachments')}</Typography>
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1, alignItems: 'center' }}>
-                {(form.files || []).map(f => {
-                  const fullUrl = `${api.defaults.baseURL}${f.path}`
-                  const isImage = (f.mime || '').startsWith('image/')
-                  return (
-                    <Box key={f.id} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
-                      {isImage ? (
-                        <a href={fullUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
-                          <img src={fullUrl} alt={f.name} style={{ maxWidth: 100, maxHeight: 70, objectFit: 'cover', border: '1px solid #ccc', borderRadius: 4 }} />
-                        </a>
-                      ) : null}
-                      <Button size="small" href={fullUrl} target="_blank" rel="noopener noreferrer" sx={{ color: 'primary.main' }}>
-                        {(f as any).category ? `[${(f as any).category}] ` : ''}{f.name}
-                      </Button>
-                      <Button
-                        size="small"
-                        color="error"
-                        onClick={async () => {
-                          await deleteAttachment(String(form.id), f.id)
-                          setForm(prev => ({ ...prev, files: (prev.files || []).filter(x => x.id !== f.id) }))
-                        }}
-                        sx={{ minWidth: 0 }}
-                      >
-                        {t('common.delete')}
-                      </Button>
-                    </Box>
-                  )
-                })}
+                {(form.files || []).map(f => (
+                  <Button
+                    key={f.id}
+                    size="small"
+                    color="error"
+                    variant="outlined"
+                    onClick={async () => {
+                      await deleteAttachment(String(form.id), f.id)
+                      setForm(prev => ({ ...prev, files: (prev.files || []).filter(x => x.id !== f.id) }))
+                    }}
+                  >
+                    {t('common.delete')}
+                  </Button>
+                ))}
               </Box>
             </Box>
           )}
@@ -446,8 +456,10 @@ export default function MeasurementsPage() {
                 </Box>
                 {photos.length > 0 && (
                   <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                    {photos.map((f, i) => (
-                      <Chip key={i} label={f.name} onDelete={() => setPhotos(photos.filter((_, index) => index !== i))} size="small" />
+                    {photos.map((_, i) => (
+                      <Button key={i} size="small" color="error" variant="outlined" onClick={() => setPhotos(photos.filter((_, index) => index !== i))}>
+                        {t('common.delete')}
+                      </Button>
                     ))}
                   </Box>
                 )}
@@ -460,8 +472,10 @@ export default function MeasurementsPage() {
                 </Button>
                 {reports.length > 0 && (
                   <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                    {reports.map((f, i) => (
-                      <Chip key={i} label={f.name} onDelete={() => setReports(reports.filter((_, index) => index !== i))} size="small" />
+                    {reports.map((_, i) => (
+                      <Button key={i} size="small" color="error" variant="outlined" onClick={() => setReports(reports.filter((_, index) => index !== i))}>
+                        {t('common.delete')}
+                      </Button>
                     ))}
                   </Box>
                 )}
@@ -474,8 +488,10 @@ export default function MeasurementsPage() {
                 </Button>
                 {certificates.length > 0 && (
                   <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                    {certificates.map((f, i) => (
-                      <Chip key={i} label={f.name} onDelete={() => setCertificates(certificates.filter((_, index) => index !== i))} size="small" />
+                    {certificates.map((_, i) => (
+                      <Button key={i} size="small" color="error" variant="outlined" onClick={() => setCertificates(certificates.filter((_, index) => index !== i))}>
+                        {t('common.delete')}
+                      </Button>
                     ))}
                   </Box>
                 )}

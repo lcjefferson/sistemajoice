@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Box, Paper, Typography, Grid, FormControl, InputLabel, Select, MenuItem, TextField, Button, Card, CardContent, Chip } from '@mui/material'
+import { Box, Paper, Typography, Grid, FormControl, InputLabel, Select, MenuItem, TextField, Button, Card, CardContent, Chip, Tabs, Tab } from '@mui/material'
 import { Line, Pie, Bar } from 'react-chartjs-2'
 import { api } from '../../shared/api'
 import { Chart, CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Tooltip, Legend } from 'chart.js'
@@ -23,6 +23,7 @@ const PARAMETERS = [
   { key: 'pm10', labelKey: 'measurements.pm10_label', type: 'bar', color: '#e91e63' },
   { key: 'pm25', labelKey: 'measurements.pm25_label', type: 'bar', color: '#9e9e9e' }
 ]
+const NO_LIMIT_KEYS = new Set(['fungiExternal', 'bacteriaExternal', 'co2External'])
 
 export default function DashboardPage() {
   const { t } = useTranslation()
@@ -33,6 +34,7 @@ export default function DashboardPage() {
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [status, setStatus] = useState('')
+  const [statusTab, setStatusTab] = useState<'all' | 'compliant' | 'noncompliant'>('all')
   const [kpis, setKpis] = useState<any>(null)
   const [series, setSeries] = useState<any[]>([])
   const [limits, setLimits] = useState<any>(null)
@@ -48,7 +50,8 @@ export default function DashboardPage() {
   }, [institutionId])
 
   const load = async () => {
-    const { data } = await api.get('/api/measurements/bi', { params: { institutionId, sectorId, from, to, status } })
+    const statusParam = statusTab === 'compliant' ? 'Conforme' : statusTab === 'noncompliant' ? 'Não Conforme' : status
+    const { data } = await api.get('/api/measurements/bi', { params: { institutionId, sectorId, from, to, status: statusParam } })
     setKpis(data.kpis)
     setSeries(data.series)
     setLimits(data.limits)
@@ -93,8 +96,32 @@ export default function DashboardPage() {
     return checkCompliance(key, avgVal, context)
   }
 
+  const mapPoints = series
+    .filter((s: any) => typeof s.latitude === 'number' && typeof s.longitude === 'number')
+    .map((s: any) => ({ lat: s.latitude as number, lon: s.longitude as number, status: s.status }))
+
+  const toMapXY = (lat: number, lon: number) => {
+    // Bounding simplificado do Brasil: lon -74..-34, lat -34..6
+    const minLon = -74, maxLon = -34
+    const minLat = -34, maxLat = 6
+    const x = ((lon - minLon) / (maxLon - minLon)) * 100
+    const y = 100 - ((lat - minLat) / (maxLat - minLat)) * 100
+    return { x: Math.max(0, Math.min(100, x)), y: Math.max(0, Math.min(100, y)) }
+  }
+
   return (
     <Box>
+      <Paper sx={{ p: 1, mb: 2 }}>
+        <Tabs
+          value={statusTab}
+          onChange={(_, v) => { setStatusTab(v); setStatus(v === 'all' ? '' : v === 'compliant' ? 'Conforme' : 'Não Conforme') }}
+          variant="scrollable"
+        >
+          <Tab value="all" label="Dashboard Geral" />
+          <Tab value="compliant" label="Conformes" />
+          <Tab value="noncompliant" label="Não Conformes" />
+        </Tabs>
+      </Paper>
       <Paper sx={{ p: 2, mb: 2 }}>
         <Grid container spacing={2}>
           <Grid item xs={12} md={2}>
@@ -156,7 +183,7 @@ export default function DashboardPage() {
                   <Paper sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                       <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>{t(p.labelKey)}</Typography>
-                      {status !== 'unknown' && (
+                      {status !== 'unknown' && !NO_LIMIT_KEYS.has(p.key) && (
                         <Chip 
                           label={status === 'ok' ? t('measurements.status_compliant') : t('measurements.status_non_compliant')} 
                           color={status === 'ok' ? 'success' : 'error'} 
@@ -259,6 +286,39 @@ export default function DashboardPage() {
                     </Box>
                   </Grid>
                 </Grid>
+              </Paper>
+            </Grid>
+            <Grid item xs={12} md={12} lg={4}>
+              <Paper sx={{ p: 2, height: '100%' }}>
+                <Typography variant="h6" gutterBottom>Mapa das Coletas (Brasil)</Typography>
+                <Box sx={{ position: 'relative', height: 300, borderRadius: 2, border: '1px solid #ddd', overflow: 'hidden', bgcolor: '#f5f8ff' }}>
+                  <Box sx={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, #e8f4ff 0%, #f7fbff 100%)' }} />
+                  <Box sx={{ position: 'absolute', top: 8, left: 10, fontSize: 12, color: '#607d8b' }}>Brasil (mapa simplificado)</Box>
+                  {mapPoints.map((p: any, idx: number) => {
+                    const { x, y } = toMapXY(p.lat, p.lon)
+                    const color = p.status === 'Conforme' ? '#4caf50' : '#f44336'
+                    return (
+                      <Box
+                        key={`${idx}-${p.lat}-${p.lon}`}
+                        sx={{
+                          position: 'absolute',
+                          left: `calc(${x}% - 4px)`,
+                          top: `calc(${y}% - 4px)`,
+                          width: 8,
+                          height: 8,
+                          borderRadius: '50%',
+                          bgcolor: color,
+                          border: '1px solid #fff',
+                          boxShadow: 1
+                        }}
+                      />
+                    )
+                  })}
+                </Box>
+                <Box sx={{ display: 'flex', gap: 2, mt: 1 }}>
+                  <Chip size="small" label="Conforme" color="success" />
+                  <Chip size="small" label="Não Conforme" color="error" />
+                </Box>
               </Paper>
             </Grid>
           </Grid>

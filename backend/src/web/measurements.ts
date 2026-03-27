@@ -221,7 +221,10 @@ router.get('/bi', requireAuth, async (req, res) => {
     co2Internal: i.co2Internal,
     co2External: i.co2External,
     pm10: i.pm10,
-    pm25: i.pm25
+    pm25: i.pm25,
+    latitude: i.latitude,
+    longitude: i.longitude,
+    status: i.status
   }))
   res.json({ kpis, series, limits })
 })
@@ -302,7 +305,7 @@ router.get('/report', requireAuth, async (req, res) => {
     return res.send(Buffer.from(buf))
   }
 
-  const doc = new PDFDocument({ margin: 18, size: 'A4', layout: 'landscape' })
+  const doc = new PDFDocument({ margin: 18, size: 'A4', layout: 'landscape', bufferPages: true })
   const chunks: Buffer[] = []
   doc.on('data', (c: Buffer) => chunks.push(c))
   doc.on('end', () => {
@@ -316,8 +319,6 @@ router.get('/report', requireAuth, async (req, res) => {
   const systemName = 'Air Watch'
   const slogan = 'Qualidade do Ar Interior - Monitoramento e Gestão'
   const toBR = (d: Date) => d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
-
-  let pageNumber = 1
 
   const drawHeader = () => {
     if (fs.existsSync(logoPath)) {
@@ -337,16 +338,16 @@ router.get('/report', requireAuth, async (req, res) => {
     doc.fillColor('black')
   }
 
-  const drawFooter = () => {
-    const toBR = (d: Date) => d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+  const drawFooter = (currentPage: number, totalPages: number) => {
     const bottom = doc.page.height - 30
     doc.fontSize(8)
     doc.text(
       `${systemName} - ${slogan} | Gerado em: ${toBR(new Date())}`,
       20,
       bottom,
-      { align: 'center', width: doc.page.width - 40 }
+      { align: 'left', width: doc.page.width - 40 }
     )
+    doc.text(`Página ${currentPage}/${totalPages}`, 20, bottom, { align: 'right', width: doc.page.width - 40 })
   }
 
   const headers = [
@@ -355,7 +356,8 @@ router.get('/report', requireAuth, async (req, res) => {
   ]
   // Larguras para caber em A4 paisagem (842pt) com margem 18; total < 806
   const widths = [32, 44, 52, 52, 26, 26, 26, 26, 26, 24, 28, 28, 28, 28, 28, 28, 42, 68, 72]
-  const startX = 18
+  const tableWidth = widths.reduce((a, b) => a + b, 0)
+  const startX = (doc.page.width - tableWidth) / 2
   let y = 72
 
   const drawTableHead = () => {
@@ -366,22 +368,19 @@ router.get('/report', requireAuth, async (req, res) => {
       x += widths[i]
     })
     y += 15
-    doc.moveTo(startX, y - 5).lineTo(startX + widths.reduce((a, b) => a + b, 0), y - 5).stroke()
+    doc.moveTo(startX, y - 5).lineTo(startX + tableWidth, y - 5).stroke()
     doc.font('Helvetica')
   }
 
   drawHeader()
   drawTableHead()
-  drawFooter()
 
   for (const i of items) {
     if (y > doc.page.height - 50) {
       doc.addPage()
-      pageNumber++
       y = 80
       drawHeader()
       drawTableHead()
-      drawFooter()
     }
 
     const nmI = (i.institution?.name ?? i.institutionId).substring(0, 15)
@@ -454,7 +453,6 @@ router.get('/report', requireAuth, async (req, res) => {
     doc.addPage()
     y = 80
     drawHeader()
-    drawFooter()
   }
   doc.fontSize(9).fillColor('black').font('Helvetica-Bold')
   doc.text('Validação do relatório', startX, y + 6)
@@ -464,6 +462,13 @@ router.get('/report', requireAuth, async (req, res) => {
   doc.text('Documento gerado eletronicamente pelo sistema Air Watch.', startX, y + 20)
   doc.text(`Emitido por: ${currentUser?.name ?? currentUser?.email ?? 'N/A'} (ID usuário: ${userShortId}) em ${toBR(new Date())}.`, startX, y + 32)
   doc.text('Este relatório constitui registro técnico das medições listadas.', startX, y + 44)
+
+  // Rodapés com paginação (Página X/Y) após total de páginas conhecido
+  const range = doc.bufferedPageRange()
+  for (let i = 0; i < range.count; i++) {
+    doc.switchToPage(range.start + i)
+    drawFooter(i + 1, range.count)
+  }
 
   doc.end()
 })
