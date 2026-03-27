@@ -21,19 +21,19 @@ type Measurement = {
   date: string
   institutionId: string
   sectorId: string
-  humidity: number
-  airSpeed: number
-  temperature: number
-  fungiInternal: number
-  fungiExternal: number
-  ieRatio: number
-  bacteriaInternal: number
-  bacteriaExternal: number
-  co2Internal: number
-  co2External: number
-  pm10: number
-  pm25: number
-  status: 'Conforme' | 'Não Conforme'
+  humidity?: number | null
+  airSpeed?: number | null
+  temperature?: number | null
+  fungiInternal?: number | null
+  fungiExternal?: number | null
+  ieRatio?: number | null
+  bacteriaInternal?: number | null
+  bacteriaExternal?: number | null
+  co2Internal?: number | null
+  co2External?: number | null
+  pm10?: number | null
+  pm25?: number | null
+  status: 'Conforme' | 'Não Conforme' | 'Pendente'
   latitude?: number
   longitude?: number
   comments?: string
@@ -44,6 +44,22 @@ type Measurement = {
 type Attachment = { id: string; name: string; path: string; mime: string; size: number; createdAt: string; category?: string }
 type Institution = { id: string; name: string }
 type Sector = { id: string; name: string; institutionId: string }
+
+/** Campos numéricos da medição (podem ser preenchidos em etapas; vazios viram null na API). */
+const MEASUREMENT_NUMERIC_KEYS = [
+  'humidity',
+  'airSpeed',
+  'temperature',
+  'fungiInternal',
+  'fungiExternal',
+  'ieRatio',
+  'bacteriaInternal',
+  'bacteriaExternal',
+  'co2Internal',
+  'co2External',
+  'pm10',
+  'pm25'
+] as const
 
 export default function MeasurementsPage() {
   const { t } = useTranslation()
@@ -78,7 +94,11 @@ export default function MeasurementsPage() {
   
   const handleGetLocation = () => {
     if (!navigator.geolocation) {
-      setFeedback({ open: true, message: t('common.location_error'), type: 'error' })
+      setFeedback({ open: true, message: t('common.location_unsupported'), type: 'error' })
+      return
+    }
+    if (typeof window !== 'undefined' && !window.isSecureContext && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+      setFeedback({ open: true, message: t('common.location_https_required'), type: 'warning' })
       return
     }
     navigator.geolocation.getCurrentPosition(
@@ -88,11 +108,17 @@ export default function MeasurementsPage() {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude
         }))
+        setFeedback({ open: true, message: t('common.location_ok'), type: 'success' })
       },
       (error) => {
         console.error(error)
-        setFeedback({ open: true, message: t('common.location_error'), type: 'error' })
-      }
+        let msg = t('common.location_error')
+        if (error.code === error.PERMISSION_DENIED) msg = t('common.location_denied')
+        else if (error.code === error.POSITION_UNAVAILABLE) msg = t('common.location_unavailable')
+        else if (error.code === error.TIMEOUT) msg = t('common.location_timeout')
+        setFeedback({ open: true, message: msg, type: 'error' })
+      },
+      { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
     )
   }
 
@@ -162,7 +188,12 @@ export default function MeasurementsPage() {
   const save = async () => {
     try {
       let id = form.id
-      const payload = { ...form, date: `${form.date}T${formTime}:00` }
+      const { institution: _inst, sector: _sec, files: _files, ...rest } = form as Measurement & { institution?: Institution; sector?: Sector }
+      const payload: Record<string, unknown> = { ...rest, date: `${form.date}T${formTime}:00` }
+      for (const k of MEASUREMENT_NUMERIC_KEYS) {
+        const v = payload[k]
+        if (v === '' || v === undefined) payload[k] = null
+      }
       if (form.id) await api.put(`/api/measurements/${form.id}`, payload)
       else { const { data } = await api.post('/api/measurements', payload); id = data.id }
       
@@ -291,7 +322,12 @@ export default function MeasurementsPage() {
             <Box sx={{ display:'flex', justifyContent:'space-between', alignItems:{ xs: 'flex-start', sm: 'center' }, flexDirection:{ xs: 'column', sm: 'row' } }}>
               <Typography sx={{ color: 'text.primary' }}>
                 <Typography component="span" sx={{ fontWeight: 'bold', mr: 1, color: 'primary.main' }}>#{m.id.slice(-6).toUpperCase()}</Typography>
-                {format(new Date(m.date), 'dd/MM/yyyy | HH:mm')} | {m.institution?.name || m.institutionId} {'>'} {m.sector?.name || m.sectorId} | {m.status === 'Conforme' ? t('measurements.status_compliant') : t('measurements.status_non_compliant')}
+                {format(new Date(m.date), 'dd/MM/yyyy | HH:mm')} | {m.institution?.name || m.institutionId} {'>'} {m.sector?.name || m.sectorId} |{' '}
+                {m.status === 'Conforme'
+                  ? t('measurements.status_compliant')
+                  : m.status === 'Pendente'
+                    ? t('measurements.status_pending')
+                    : t('measurements.status_non_compliant')}
               </Typography>
               <Box sx={{ display:'flex', gap:1, flexWrap:'wrap', mt:{ xs: 1, sm: 0 } }}>
                 <Button sx={{ width:{ xs:'100%', sm:'auto' } }} onClick={() => {
@@ -372,27 +408,45 @@ export default function MeasurementsPage() {
               ['co2External',t('measurements.co2_external_label')],
               ['pm10',t('measurements.pm10_label')],
               ['pm25',t('measurements.pm25_label')]
-            ].map(([key,label]) => (
-              <TextField 
-                key={key} 
-                label={label as string} 
-                type="number" 
-                fullWidth 
+            ].map(([key, label]) => (
+              <TextField
+                key={key}
+                label={label as string}
+                type="number"
+                fullWidth
                 disabled={key === 'ieRatio'}
-                value={(form as any)[key]||''} 
+                value={(form as Record<string, unknown>)[key as string] ?? ''}
                 onChange={e => {
-                  const val = parseFloat(e.target.value)
-                  const newForm = { ...form, [key]: val }
-                  
-                  // Auto-calculate I/E Ratio for Fungi
-                  if (key === 'fungiInternal' || key === 'fungiExternal') {
-                    const int = key === 'fungiInternal' ? val : (form.fungiInternal || 0)
-                    const ext = key === 'fungiExternal' ? val : (form.fungiExternal || 0)
-                    newForm.ieRatio = ext === 0 ? 0 : parseFloat((int / ext).toFixed(2))
+                  const keyStr = key as string
+                  const raw = e.target.value
+                  if (raw === '') {
+                    const newForm = { ...form, [keyStr]: undefined }
+                    if (keyStr === 'fungiInternal' || keyStr === 'fungiExternal') {
+                      const int =
+                        keyStr === 'fungiInternal' ? undefined : newForm.fungiInternal ?? undefined
+                      const ext =
+                        keyStr === 'fungiExternal' ? undefined : newForm.fungiExternal ?? undefined
+                      if (int != null && ext != null && Number(ext) !== 0)
+                        newForm.ieRatio = parseFloat((Number(int) / Number(ext)).toFixed(2))
+                      else if (int != null && ext != null && Number(ext) === 0) newForm.ieRatio = 0
+                      else newForm.ieRatio = undefined
+                    }
+                    setForm(newForm)
+                    return
                   }
-                  
+                  const val = parseFloat(raw)
+                  if (Number.isNaN(val)) return
+                  const newForm = { ...form, [keyStr]: val }
+                  if (keyStr === 'fungiInternal' || keyStr === 'fungiExternal') {
+                    const int = keyStr === 'fungiInternal' ? val : (form.fungiInternal ?? undefined)
+                    const ext = keyStr === 'fungiExternal' ? val : (form.fungiExternal ?? undefined)
+                    if (int != null && ext != null && Number(ext) !== 0)
+                      newForm.ieRatio = parseFloat((Number(int) / Number(ext)).toFixed(2))
+                    else if (int != null && ext != null && Number(ext) === 0) newForm.ieRatio = 0
+                    else newForm.ieRatio = undefined
+                  }
                   setForm(newForm)
-                }} 
+                }}
               />
             ))}
           </Box>

@@ -43,18 +43,18 @@ model Measurement {
   sectorId         String
   user             User @relation(fields: [userId], references: [id])
   userId           String
-  humidity         Float
-  airSpeed         Float
-  temperature      Float
-  fungiInternal    Float
-  fungiExternal    Float
-  ieRatio          Float
-  bacteriaInternal Float
-  bacteriaExternal Float
-  co2Internal      Float
-  co2External      Float
-  pm10             Float
-  pm25             Float
+  humidity         Float?
+  airSpeed         Float?
+  temperature      Float?
+  fungiInternal    Float?
+  fungiExternal    Float?
+  ieRatio          Float?
+  bacteriaInternal Float?
+  bacteriaExternal Float?
+  co2Internal      Float?
+  co2External      Float?
+  pm10             Float?
+  pm25             Float?
   status           String
   latitude         Float?
   longitude        Float?

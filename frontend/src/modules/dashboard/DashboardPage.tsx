@@ -4,6 +4,7 @@ import { Line, Pie, Bar } from 'react-chartjs-2'
 import { api } from '../../shared/api'
 import { Chart, CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Tooltip, Legend } from 'chart.js'
 import { useTranslation } from 'react-i18next'
+import DashboardMap from './DashboardMap'
 
 Chart.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Tooltip, Legend)
 
@@ -62,7 +63,7 @@ export default function DashboardPage() {
   }, [])
 
   const checkCompliance = (key: string, val: number, m?: any) => {
-    if (!limits || val === undefined || val === null) return 'unknown'
+    if (!limits || val === undefined || val === null || Number.isNaN(Number(val))) return 'unknown'
     const co2Diff = m ? (m.co2Internal - m.co2External) : 0
 
     if (key === 'temperature') return (val >= limits.temperatureMin && val <= limits.temperatureMax) ? 'ok' : 'nok'
@@ -97,20 +98,12 @@ export default function DashboardPage() {
   }
 
   const mapPoints = series
-    .filter((s: any) => typeof s.latitude === 'number' && typeof s.longitude === 'number')
-    .map((s: any) => ({ lat: s.latitude as number, lon: s.longitude as number, status: s.status }))
-
-  const toMapXY = (lat: number, lon: number) => {
-    // Bounding simplificado do Brasil: lon -74..-34, lat -34..6
-    const minLon = -74, maxLon = -34
-    const minLat = -34, maxLat = 6
-    const x = ((lon - minLon) / (maxLon - minLon)) * 100
-    const y = 100 - ((lat - minLat) / (maxLat - minLat)) * 100
-    return { x: Math.max(0, Math.min(100, x)), y: Math.max(0, Math.min(100, y)) }
-  }
-
-  // Silhueta simplificada do Brasil (SVG) em escala 0..100 para ficar mais evidente no card
-  const brazilPath = 'M34 8 L50 10 L66 18 L75 30 L78 42 L74 52 L78 64 L88 72 L87 82 L78 90 L63 92 L53 98 L39 100 L28 94 L18 84 L11 75 L7 64 L3 56 L4 45 L0 36 L3 28 L12 22 L20 12 L30 9 Z'
+    .map((s: any) => ({
+      lat: Number(s.latitude),
+      lng: Number(s.longitude),
+      status: String(s.status ?? '')
+    }))
+    .filter((p: { lat: number; lng: number }) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
 
   return (
     <Box>
@@ -152,6 +145,7 @@ export default function DashboardPage() {
                 <MenuItem value="">{t('common.all')}</MenuItem>
                 <MenuItem value="Conforme">{t('measurements.status_compliant')}</MenuItem>
                 <MenuItem value="Não Conforme">{t('measurements.status_non_compliant')}</MenuItem>
+                <MenuItem value="Pendente">{t('measurements.status_pending')}</MenuItem>
               </Select>
             </FormControl>
           </Grid>
@@ -163,8 +157,9 @@ export default function DashboardPage() {
       {kpis && (
         <>
           <Grid container spacing={2} sx={{ mb: 2 }}>
-            <Grid item xs={12} md={6}><Card><CardContent><Typography variant="caption">{t('dashboard.compliant')}</Typography><Typography variant="h5" color="success.main">{kpis.compliantCount}</Typography></CardContent></Card></Grid>
-            <Grid item xs={12} md={6}><Card><CardContent><Typography variant="caption">{t('dashboard.non_compliant')}</Typography><Typography variant="h5" color="error.main">{kpis.nonCompliantCount}</Typography></CardContent></Card></Grid>
+            <Grid item xs={12} md={4}><Card><CardContent><Typography variant="caption">{t('dashboard.compliant')}</Typography><Typography variant="h5" color="success.main">{kpis.compliantCount}</Typography></CardContent></Card></Grid>
+            <Grid item xs={12} md={4}><Card><CardContent><Typography variant="caption">{t('dashboard.non_compliant')}</Typography><Typography variant="h5" color="error.main">{kpis.nonCompliantCount}</Typography></CardContent></Card></Grid>
+            <Grid item xs={12} md={4}><Card><CardContent><Typography variant="caption">{t('dashboard.pending')}</Typography><Typography variant="h5" color="warning.main">{kpis.pendingCount ?? 0}</Typography></CardContent></Card></Grid>
           </Grid>
 
           <Grid container spacing={2}>
@@ -253,10 +248,10 @@ export default function DashboardPage() {
                     <Box sx={{ height: 300, display: 'flex', justifyContent: 'center' }}>
                       <Pie 
                         data={{ 
-                          labels: [t('dashboard.compliant'), t('dashboard.non_compliant')],
+                          labels: [t('dashboard.compliant'), t('dashboard.non_compliant'), t('dashboard.pending')],
                           datasets: [{ 
-                            data: [kpis.compliantCount, kpis.nonCompliantCount],
-                            backgroundColor: ['#4caf50', '#f44336']
+                            data: [kpis.compliantCount, kpis.nonCompliantCount, kpis.pendingCount ?? 0],
+                            backgroundColor: ['#4caf50', '#f44336', '#ed6c02']
                           }] 
                         }}
                         options={{ 
@@ -268,24 +263,39 @@ export default function DashboardPage() {
                   </Grid>
                   <Grid item xs={12} md={6}>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}>
+                      {(() => {
+                        const pend = kpis.pendingCount ?? 0
+                        const tot = Math.max(1, kpis.compliantCount + kpis.nonCompliantCount + pend)
+                        return (
+                          <>
                       <Paper variant="outlined" sx={{ p: 2, borderLeft: '6px solid #4caf50' }}>
                         <Typography variant="subtitle2" color="text.secondary">{t('dashboard.compliant')}</Typography>
                         <Typography variant="h4">{kpis.compliantCount}</Typography>
                         <Typography variant="body2" color="text.secondary">
-                          {((kpis.compliantCount / (kpis.compliantCount + kpis.nonCompliantCount || 1)) * 100).toFixed(1)}%
+                          {((kpis.compliantCount / tot) * 100).toFixed(1)}%
                         </Typography>
                       </Paper>
                       <Paper variant="outlined" sx={{ p: 2, borderLeft: '6px solid #f44336' }}>
                         <Typography variant="subtitle2" color="text.secondary">{t('dashboard.non_compliant')}</Typography>
                         <Typography variant="h4">{kpis.nonCompliantCount}</Typography>
                         <Typography variant="body2" color="text.secondary">
-                          {((kpis.nonCompliantCount / (kpis.compliantCount + kpis.nonCompliantCount || 1)) * 100).toFixed(1)}%
+                          {((kpis.nonCompliantCount / tot) * 100).toFixed(1)}%
+                        </Typography>
+                      </Paper>
+                      <Paper variant="outlined" sx={{ p: 2, borderLeft: '6px solid #ed6c02' }}>
+                        <Typography variant="subtitle2" color="text.secondary">{t('dashboard.pending')}</Typography>
+                        <Typography variant="h4">{pend}</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {((pend / tot) * 100).toFixed(1)}%
                         </Typography>
                       </Paper>
                       <Paper variant="outlined" sx={{ p: 2, borderLeft: '6px solid #1976d2' }}>
                         <Typography variant="subtitle2" color="text.secondary">{t('dashboard.occurrences')}</Typography>
-                        <Typography variant="h4">{kpis.compliantCount + kpis.nonCompliantCount}</Typography>
+                        <Typography variant="h4">{tot}</Typography>
                       </Paper>
+                          </>
+                        )
+                      })()}
                     </Box>
                   </Grid>
                 </Grid>
@@ -293,41 +303,12 @@ export default function DashboardPage() {
             </Grid>
             <Grid item xs={12} md={12} lg={4}>
               <Paper sx={{ p: 2, height: '100%' }}>
-                <Typography variant="h6" gutterBottom>Mapa das Coletas (Brasil)</Typography>
-                <Box sx={{ position: 'relative', height: 300, borderRadius: 2, border: '1px solid #ddd', overflow: 'hidden', bgcolor: '#f5f8ff' }}>
-                  <Box sx={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, #e8f4ff 0%, #f7fbff 100%)' }} />
-                  <Box sx={{ position: 'absolute', inset: 0, p: 2 }}>
-                    <svg viewBox="0 0 100 100" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" aria-label="Mapa do Brasil">
-                      <path d={brazilPath} fill="#b7e4c7" stroke="#2d6a4f" strokeWidth="1.5" />
-                    </svg>
-                  </Box>
-                  <Box sx={{ position: 'absolute', top: 8, left: 10, fontSize: 12, color: '#1b4332', fontWeight: 700, bgcolor: 'rgba(255,255,255,0.7)', px: 0.5, borderRadius: 0.5 }}>
-                    Mapa do Brasil
-                  </Box>
-                  {mapPoints.map((p: any, idx: number) => {
-                    const { x, y } = toMapXY(p.lat, p.lon)
-                    const color = p.status === 'Conforme' ? '#4caf50' : '#f44336'
-                    return (
-                      <Box
-                        key={`${idx}-${p.lat}-${p.lon}`}
-                        sx={{
-                          position: 'absolute',
-                          left: `calc(${x}% - 4px)`,
-                          top: `calc(${y}% - 4px)`,
-                          width: 8,
-                          height: 8,
-                          borderRadius: '50%',
-                          bgcolor: color,
-                          border: '1px solid #fff',
-                          boxShadow: 1
-                        }}
-                      />
-                    )
-                  })}
-                </Box>
-                <Box sx={{ display: 'flex', gap: 2, mt: 1 }}>
+                <Typography variant="h6" gutterBottom>Mapa das coletas (OpenStreetMap)</Typography>
+                <DashboardMap points={mapPoints} />
+                <Box sx={{ display: 'flex', gap: 2, mt: 1, flexWrap: 'wrap' }}>
                   <Chip size="small" label="Conforme" color="success" />
                   <Chip size="small" label="Não Conforme" color="error" />
+                  <Chip size="small" label={t('dashboard.pending')} sx={{ bgcolor: '#ed6c02', color: '#fff' }} />
                 </Box>
               </Paper>
             </Grid>

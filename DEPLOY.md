@@ -23,6 +23,8 @@
 |----------------|-------------|-----------|
 | `VITE_API_URL` | **Sim** em produção | URL completa do backend (ex.: `https://sua-api.onrender.com`). Sem isso, o frontend usa `http://hostname:4000`. |
 
+O mapa do Dashboard usa **Leaflet** com tiles **OpenStreetMap** (sem chave de API).
+
 ## Build local (teste antes do deploy)
 
 ```bash

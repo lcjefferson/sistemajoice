@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
-import { computeStatus, limits } from '../utils/validation.js'
+import { computeStatus, limits, MEASUREMENT_NUMERIC_KEYS } from '../utils/validation.js'
 import multer from 'multer'
 import fs from 'fs'
 import path from 'path'
@@ -18,34 +18,27 @@ const storage = multer.diskStorage({
 })
 const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } })
 
-function getComputedStatus(m: {
-  humidity: number
-  airSpeed: number
-  temperature: number
-  fungiInternal: number
-  fungiExternal: number
-  ieRatio: number
-  bacteriaInternal: number
-  bacteriaExternal: number
-  co2Internal: number
-  co2External: number
-  pm10: number
-  pm25: number
-}) {
-  return computeStatus({
-    humidity: Number(m.humidity),
-    airSpeed: Number(m.airSpeed),
-    temperature: Number(m.temperature),
-    fungiInternal: Number(m.fungiInternal),
-    fungiExternal: Number(m.fungiExternal),
-    ieRatio: Number(m.ieRatio),
-    bacteriaInternal: Number(m.bacteriaInternal),
-    bacteriaExternal: Number(m.bacteriaExternal),
-    co2Internal: Number(m.co2Internal),
-    co2External: Number(m.co2External),
-    pm10: Number(m.pm10),
-    pm25: Number(m.pm25)
-  })
+function getComputedStatus(m: Parameters<typeof computeStatus>[0]) {
+  return computeStatus(m)
+}
+
+/** Normaliza corpo da API: campos vazios viram null (medição parcial permitida). */
+function sanitizeMeasurementPayload(body: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...body }
+  for (const k of MEASUREMENT_NUMERIC_KEYS) {
+    const v = out[k]
+    if (v === '' || v === undefined) (out as Record<string, unknown>)[k] = null
+    else if (v !== null) {
+      const n = Number(v)
+      ;(out as Record<string, unknown>)[k] = Number.isFinite(n) ? n : null
+    }
+  }
+  return out
+}
+
+function fmtCell(v: number | null | undefined): string {
+  if (v == null || Number.isNaN(Number(v))) return '-'
+  return String(v)
 }
 
 router.get('/', requireAuth, async (req, res) => {
@@ -81,20 +74,22 @@ router.get('/', requireAuth, async (req, res) => {
 
 router.post('/', requireAuth, async (req, res) => {
   const user = (req as any).user
-  const { institution, sector, files, id, createdAt, updatedAt, userId: _u, ...data } = req.body
-  const status = computeStatus(data)
+  const { institution, sector, files, id, createdAt, updatedAt, userId: _u, ...rest } = req.body
+  const data = sanitizeMeasurementPayload(rest) as Record<string, unknown>
+  const status = computeStatus(data as Parameters<typeof computeStatus>[0])
   const m = await prisma.measurement.create({
-    data: { ...data, status, userId: user.id, date: new Date(data.date) }
+    data: { ...(data as object), status, userId: user.id, date: new Date(data.date as string) } as any
   })
   res.json({ id: m.id })
 })
 
 router.put('/:id', requireAuth, async (req, res) => {
-  const { institution, sector, files, id, createdAt, updatedAt, userId: _u, ...data } = req.body
-  const status = computeStatus(data)
+  const { institution, sector, files, id, createdAt, updatedAt, userId: _u, ...rest } = req.body
+  const data = sanitizeMeasurementPayload(rest) as Record<string, unknown>
+  const status = computeStatus(data as Parameters<typeof computeStatus>[0])
   await prisma.measurement.update({
     where: { id: req.params.id },
-    data: { ...data, status, date: new Date(data.date) }
+    data: { ...(data as object), status, date: new Date(data.date as string) } as any
   })
   res.json({ ok: true })
 })
@@ -167,27 +162,39 @@ router.get('/bi', requireAuth, async (req, res) => {
   if (status === 'Não Conforme') {
     items = items.map(m => {
       const newItem = { ...m }
-      const bacteriaRatio = m.bacteriaExternal === 0 ? 0 : m.bacteriaInternal / m.bacteriaExternal
-      const fungiInternalOk = m.fungiInternal < limits.fungiInternal
-      const fungiRatioOk = m.ieRatio <= limits.ieMax
-      const bacteriaInternalOk = m.bacteriaInternal < limits.bacteriaInternal
+      const bacteriaRatio =
+        m.bacteriaExternal == null || m.bacteriaExternal === 0 ? 0 : m.bacteriaInternal! / m.bacteriaExternal
+      const fungiInternalOk = m.fungiInternal != null && m.fungiInternal < limits.fungiInternal
+      const fungiRatioOk = m.ieRatio != null && m.ieRatio <= limits.ieMax
+      const bacteriaInternalOk = m.bacteriaInternal != null && m.bacteriaInternal < limits.bacteriaInternal
       const bacteriaRatioOk = bacteriaRatio <= limits.ieMax
-      
-      if (m.temperature >= limits.temperatureMin && m.temperature <= limits.temperatureMax) newItem.temperature = 0
-      if (m.humidity >= limits.humidityMin && m.humidity <= limits.humidityMax) newItem.humidity = 0
-      // Fungo externo não possui limite máximo absoluto: só IE e fungo interno entram na conformidade
+
+      if (
+        m.temperature != null &&
+        m.temperature >= limits.temperatureMin &&
+        m.temperature <= limits.temperatureMax
+      )
+        newItem.temperature = 0
+      if (m.humidity != null && m.humidity >= limits.humidityMin && m.humidity <= limits.humidityMax) newItem.humidity = 0
       if (fungiInternalOk) newItem.fungiInternal = 0
-      if (fungiRatioOk) { newItem.fungiExternal = 0; newItem.ieRatio = 0 }
-      // Bactéria externa não possui limite máximo absoluto: só relação I/E e bactéria interna
+      if (fungiRatioOk) {
+        newItem.fungiExternal = 0
+        newItem.ieRatio = 0
+      }
       if (bacteriaInternalOk) newItem.bacteriaInternal = 0
       if (bacteriaRatioOk) newItem.bacteriaExternal = 0
-      if ((m.co2Internal - m.co2External) <= limits.co2DiffMax) { newItem.co2Internal = 0; newItem.co2External = 0 }
-      if (m.pm10 <= limits.pm10) newItem.pm10 = 0
-      if (m.pm25 <= limits.pm25) newItem.pm25 = 0
-      
-      // Keep only non-compliant values when filtering "Não Conforme"
-      if (m.airSpeed <= limits.airSpeedMax) newItem.airSpeed = 0
-      
+      if (
+        m.co2Internal != null &&
+        m.co2External != null &&
+        m.co2Internal - m.co2External <= limits.co2DiffMax
+      ) {
+        newItem.co2Internal = 0
+        newItem.co2External = 0
+      }
+      if (m.pm10 != null && m.pm10 <= limits.pm10) newItem.pm10 = 0
+      if (m.pm25 != null && m.pm25 <= limits.pm25) newItem.pm25 = 0
+      if (m.airSpeed != null && m.airSpeed <= limits.airSpeedMax) newItem.airSpeed = 0
+
       return newItem
     })
   }
@@ -206,7 +213,8 @@ router.get('/bi', requireAuth, async (req, res) => {
     pm10Avg: avg(items.map(i => i.pm10)),
     pm25Avg: avg(items.map(i => i.pm25)),
     compliantCount: items.filter(i => i.status === 'Conforme').length,
-    nonCompliantCount: items.filter(i => i.status !== 'Conforme').length
+    nonCompliantCount: items.filter(i => i.status === 'Não Conforme').length,
+    pendingCount: items.filter(i => i.status === 'Pendente').length
   }
   const series = items.map(i => ({
     date: i.date.toISOString().slice(0, 10),
@@ -391,11 +399,13 @@ router.get('/report', requireAuth, async (req, res) => {
     const coord = i.latitude && i.longitude ? `${i.latitude.toFixed(3)}, ${i.longitude.toFixed(3)}` : '-'
     const obs = ((i as any).comments || '').substring(0, 20)
     const idShort = i.id.slice(-6).toUpperCase()
-    const bacteriaRatio = i.bacteriaExternal === 0 ? 0 : i.bacteriaInternal / i.bacteriaExternal
-    const co2Diff = i.co2Internal - i.co2External
-    const fungiInternalOk = i.fungiInternal < limits.fungiInternal
-    const fungiRatioOk = i.ieRatio <= limits.ieMax
-    const bacteriaInternalOk = i.bacteriaInternal < limits.bacteriaInternal
+    const bacteriaRatio =
+      i.bacteriaExternal == null || i.bacteriaExternal === 0 ? 0 : Number(i.bacteriaInternal) / Number(i.bacteriaExternal)
+    const co2Diff =
+      i.co2Internal != null && i.co2External != null ? i.co2Internal - i.co2External : NaN
+    const fungiInternalOk = i.fungiInternal != null && i.fungiInternal < limits.fungiInternal
+    const fungiRatioOk = i.ieRatio != null && i.ieRatio <= limits.ieMax
+    const bacteriaInternalOk = i.bacteriaInternal != null && i.bacteriaInternal < limits.bacteriaInternal
 
     const computedStatus = getComputedStatus(i)
     const row = [
@@ -403,38 +413,44 @@ router.get('/report', requireAuth, async (req, res) => {
       s,
       nmI,
       nmS,
-      String(i.temperature),
-      String(i.humidity),
-      String(i.airSpeed),
-      String(i.fungiInternal),
-      String(i.fungiExternal),
-      String(i.ieRatio),
-      String(i.bacteriaInternal),
-      String(i.bacteriaExternal),
-      String(i.co2Internal),
-      String(i.co2External),
-      String(i.pm10),
-      String(i.pm25),
+      fmtCell(i.temperature),
+      fmtCell(i.humidity),
+      fmtCell(i.airSpeed),
+      fmtCell(i.fungiInternal),
+      fmtCell(i.fungiExternal),
+      fmtCell(i.ieRatio),
+      fmtCell(i.bacteriaInternal),
+      fmtCell(i.bacteriaExternal),
+      fmtCell(i.co2Internal),
+      fmtCell(i.co2External),
+      fmtCell(i.pm10),
+      fmtCell(i.pm25),
       computedStatus,
       coord,
       obs
     ]
 
-    // Índices de coluna do relatório geral que devem ficar em vermelho se não conformes
+    // Índices de coluna do relatório geral que devem ficar em vermelho se não conformes (valores ausentes não alertam)
     const nonCompliantByCol: Record<number, boolean> = {
-      4: !(i.temperature >= limits.temperatureMin && i.temperature <= limits.temperatureMax), // Temp
-      5: !(i.humidity >= limits.humidityMin && i.humidity <= limits.humidityMax), // Umidade
-      6: !(i.airSpeed <= limits.airSpeedMax), // Vel.Ar
-      7: !fungiInternalOk, // F.Int
-      8: false, // F.Ext (externo não tem limite máximo absoluto)
-      9: !fungiRatioOk, // I/E
-      10: !bacteriaInternalOk, // B.Int (somente limite interno < 500)
-      11: false, // B.Ext (externo não possui limite máximo absoluto)
-      12: !(co2Diff <= limits.co2DiffMax), // CO2.I
-      13: false, // CO2.E (externo não tem limite absoluto)
-      14: !(i.pm10 <= limits.pm10), // PM10
-      15: !(i.pm25 <= limits.pm25), // PM2.5
-      16: computedStatus !== 'Conforme' // Status
+      4:
+        i.temperature != null &&
+        !(i.temperature >= limits.temperatureMin && i.temperature <= limits.temperatureMax),
+      5:
+        i.humidity != null && !(i.humidity >= limits.humidityMin && i.humidity <= limits.humidityMax),
+      6: i.airSpeed != null && !(i.airSpeed <= limits.airSpeedMax),
+      7: i.fungiInternal != null && !fungiInternalOk,
+      8: false,
+      9: i.ieRatio != null && !fungiRatioOk,
+      10: i.bacteriaInternal != null && !bacteriaInternalOk,
+      11: false,
+      12:
+        i.co2Internal != null &&
+        i.co2External != null &&
+        !(co2Diff <= limits.co2DiffMax),
+      13: false,
+      14: i.pm10 != null && !(i.pm10 <= limits.pm10),
+      15: i.pm25 != null && !(i.pm25 <= limits.pm25),
+      16: computedStatus === 'Não Conforme'
     }
 
     doc.fontSize(5)
@@ -581,68 +597,76 @@ router.get('/:id/report', requireAuth, async (req, res) => {
 
   const coord = m.latitude && m.longitude ? `${m.latitude.toFixed(4)}, ${m.longitude.toFixed(4)}` : 'Não registrado'
 
-  const bacteriaRatio = m.bacteriaExternal === 0 ? 0 : m.bacteriaInternal / m.bacteriaExternal
-  const co2Diff = m.co2Internal - m.co2External
+  const bacteriaRatio =
+    m.bacteriaExternal == null || m.bacteriaExternal === 0 ? 0 : Number(m.bacteriaInternal) / Number(m.bacteriaExternal)
+  const co2Diff =
+    m.co2Internal != null && m.co2External != null ? m.co2Internal - m.co2External : NaN
   const rows: Array<{ label: string; value: string; nonCompliant?: boolean }> = [
     {
       label: 'Temperatura (C)',
-      value: String(m.temperature),
-      nonCompliant: !(m.temperature >= limits.temperatureMin && m.temperature <= limits.temperatureMax)
+      value: fmtCell(m.temperature),
+      nonCompliant:
+        m.temperature != null &&
+        !(m.temperature >= limits.temperatureMin && m.temperature <= limits.temperatureMax)
     },
     {
       label: 'Umidade (%)',
-      value: String(m.humidity),
-      nonCompliant: !(m.humidity >= limits.humidityMin && m.humidity <= limits.humidityMax)
+      value: fmtCell(m.humidity),
+      nonCompliant:
+        m.humidity != null && !(m.humidity >= limits.humidityMin && m.humidity <= limits.humidityMax)
     },
     {
       label: 'Velocidade do ar (m/s)',
-      value: String(m.airSpeed),
-      nonCompliant: !(m.airSpeed <= limits.airSpeedMax)
+      value: fmtCell(m.airSpeed),
+      nonCompliant: m.airSpeed != null && !(m.airSpeed <= limits.airSpeedMax)
     },
     {
       label: 'Fungos Internos (UFC/m3)',
-      value: String(m.fungiInternal),
-      nonCompliant: !(m.fungiInternal < limits.fungiInternal)
+      value: fmtCell(m.fungiInternal),
+      nonCompliant: m.fungiInternal != null && !(m.fungiInternal < limits.fungiInternal)
     },
     {
       label: 'Fungos Externos (UFC/m3)',
-      value: String(m.fungiExternal),
+      value: fmtCell(m.fungiExternal),
       nonCompliant: false
     },
     {
       label: 'Relação I/E',
-      value: String(m.ieRatio),
-      nonCompliant: !(m.ieRatio <= limits.ieMax)
+      value: fmtCell(m.ieRatio),
+      nonCompliant: m.ieRatio != null && !(m.ieRatio <= limits.ieMax)
     },
     {
       label: 'Bactérias Internas (UFC/m3)',
-      value: String(m.bacteriaInternal),
-      nonCompliant: !(m.bacteriaInternal < limits.bacteriaInternal)
+      value: fmtCell(m.bacteriaInternal),
+      nonCompliant: m.bacteriaInternal != null && !(m.bacteriaInternal < limits.bacteriaInternal)
     },
     {
       label: 'Bactérias Externas (UFC/m3)',
-      value: String(m.bacteriaExternal),
+      value: fmtCell(m.bacteriaExternal),
       nonCompliant: false
     },
     {
       label: 'CO2 Interno (ppm)',
-      value: String(m.co2Internal),
-      nonCompliant: !(co2Diff <= limits.co2DiffMax)
+      value: fmtCell(m.co2Internal),
+      nonCompliant:
+        m.co2Internal != null &&
+        m.co2External != null &&
+        !(co2Diff <= limits.co2DiffMax)
     },
     {
       label: 'CO2 Externo (ppm)',
-      value: String(m.co2External),
+      value: fmtCell(m.co2External),
       nonCompliant: false
     },
     {
       label: 'PM10 (ug/m3)',
-      value: String(m.pm10),
-      nonCompliant: !(m.pm10 <= limits.pm10)
+      value: fmtCell(m.pm10),
+      nonCompliant: m.pm10 != null && !(m.pm10 <= limits.pm10)
     },
     {
       label: 'PM2.5 (ug/m3)',
-      value: String(m.pm25),
-      nonCompliant: !(m.pm25 <= limits.pm25)
+      value: fmtCell(m.pm25),
+      nonCompliant: m.pm25 != null && !(m.pm25 <= limits.pm25)
     },
     { label: 'Localização', value: coord, nonCompliant: false },
     { label: 'Comentários', value: (m as any).comments || '-', nonCompliant: false }
@@ -779,9 +803,10 @@ router.get('/:id/report', requireAuth, async (req, res) => {
   doc.end()
 })
 
-function avg(list: number[]) {
-  if (!list.length) return 0
-  return list.reduce((a, b) => a + b, 0) / list.length
+function avg(list: (number | null | undefined)[]) {
+  const nums = list.map(v => (v == null || Number.isNaN(Number(v)) ? null : Number(v))).filter((x): x is number => x !== null)
+  if (!nums.length) return 0
+  return nums.reduce((a, b) => a + b, 0) / nums.length
 }
 
 export default router
