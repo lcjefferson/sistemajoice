@@ -109,8 +109,8 @@ export default function DashboardPage() {
     return { x: Math.max(0, Math.min(100, x)), y: Math.max(0, Math.min(100, y)) }
   }
 
-  // Silhueta simplificada do Brasil (SVG), para deixar o mapa visível mesmo com poucos pontos
-  const brazilPath = 'M136 18 L174 22 L207 44 L227 79 L232 114 L221 141 L227 168 L250 188 L248 214 L228 232 L193 236 L167 258 L131 271 L102 255 L76 227 L58 206 L48 180 L36 158 L38 126 L27 102 L35 82 L59 68 L78 45 L101 34 Z'
+  // Silhueta simplificada do Brasil (SVG) em escala 0..100 para ficar mais evidente no card
+  const brazilPath = 'M34 8 L50 10 L66 18 L75 30 L78 42 L74 52 L78 64 L88 72 L87 82 L78 90 L63 92 L53 98 L39 100 L28 94 L18 84 L11 75 L7 64 L3 56 L4 45 L0 36 L3 28 L12 22 L20 12 L30 9 Z'
 
   return (
     <Box>
@@ -296,12 +296,14 @@ export default function DashboardPage() {
                 <Typography variant="h6" gutterBottom>Mapa das Coletas (Brasil)</Typography>
                 <Box sx={{ position: 'relative', height: 300, borderRadius: 2, border: '1px solid #ddd', overflow: 'hidden', bgcolor: '#f5f8ff' }}>
                   <Box sx={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, #e8f4ff 0%, #f7fbff 100%)' }} />
-                  <Box sx={{ position: 'absolute', inset: 0, p: 1.5 }}>
-                    <svg viewBox="0 0 280 290" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" aria-label="Mapa do Brasil">
-                      <path d={brazilPath} fill="#dff0d8" stroke="#7da67b" strokeWidth="2" />
+                  <Box sx={{ position: 'absolute', inset: 0, p: 2 }}>
+                    <svg viewBox="0 0 100 100" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" aria-label="Mapa do Brasil">
+                      <path d={brazilPath} fill="#b7e4c7" stroke="#2d6a4f" strokeWidth="1.5" />
                     </svg>
                   </Box>
-                  <Box sx={{ position: 'absolute', top: 8, left: 10, fontSize: 12, color: '#607d8b', fontWeight: 600 }}>Brasil</Box>
+                  <Box sx={{ position: 'absolute', top: 8, left: 10, fontSize: 12, color: '#1b4332', fontWeight: 700, bgcolor: 'rgba(255,255,255,0.7)', px: 0.5, borderRadius: 0.5 }}>
+                    Mapa do Brasil
+                  </Box>
                   {mapPoints.map((p: any, idx: number) => {
                     const { x, y } = toMapXY(p.lat, p.lon)
                     const color = p.status === 'Conforme' ? '#4caf50' : '#f44336'
