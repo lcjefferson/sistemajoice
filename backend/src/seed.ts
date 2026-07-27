@@ -2,24 +2,29 @@ import { prisma } from './db.js'
 import bcrypt from 'bcryptjs'
 import { computeStatus } from './utils/validation.js'
 
-async function run() {
-  const email = 'admin@sistema.local'
-  const exists = await prisma.user.findUnique({ where: { email } })
-  if (!exists) {
-    const hash = await bcrypt.hash('admin123', 10)
-    await prisma.user.create({ data: { name: 'Administrador', email, password: hash, role: 'admin' } })
-    console.log('Usuário admin criado: admin@sistema.local / admin123')
-  } else {
-    console.log('Usuário admin já existe')
+/** Popula o banco só se estiver vazio (útil no Render free, SQLite efêmero). */
+export async function seedIfEmpty() {
+  const existing = await prisma.user.count()
+  if (existing > 0) {
+    console.log('Seed ignorado: banco já possui dados')
+    return
   }
+
+  const email = 'admin@sistema.local'
+  const hash = await bcrypt.hash('admin123', 10)
+  await prisma.user.create({
+    data: { name: 'Administrador', email, password: hash, role: 'admin' }
+  })
+  console.log('Usuário admin criado: admin@sistema.local / admin123')
+
   const user = await prisma.user.findUnique({ where: { email } })
   const instNames = ['Hospital Alfa', 'Universidade Beta']
   const insts = [] as { id: string; name: string }[]
   for (const name of instNames) {
-    const found = await prisma.institution.findFirst({ where: { name } })
-    const i = found ?? await prisma.institution.create({ data: { name } })
+    const i = await prisma.institution.create({ data: { name } })
     insts.push(i)
   }
+
   const sectorsData = [
     { name: 'UTI Adulto', institutionId: insts[0].id },
     { name: 'Laboratório', institutionId: insts[0].id },
@@ -28,12 +33,14 @@ async function run() {
   ]
   const sectors = [] as { id: string; name: string; institutionId: string }[]
   for (const s of sectorsData) {
-    const found = await prisma.sector.findFirst({ where: { name: s.name } })
-    const created = found ?? await prisma.sector.create({ data: s })
+    const created = await prisma.sector.create({ data: s })
     sectors.push(created)
   }
+
   const today = new Date()
-  const randomInRange = (min: number, max: number) => Math.round((Math.random() * (max - min) + min) * 100) / 100
+  const randomInRange = (min: number, max: number) =>
+    Math.round((Math.random() * (max - min) + min) * 100) / 100
+
   for (const s of sectors) {
     for (let d = 0; d < 60; d++) {
       const date = new Date(today)
@@ -66,7 +73,21 @@ async function run() {
     }
   }
   console.log('Dados de exemplo inseridos')
+}
+
+async function runCli() {
+  await seedIfEmpty()
   process.exit(0)
 }
 
-run()
+const isDirectRun =
+  process.argv[1]?.includes('seed') ||
+  process.argv[1]?.endsWith('seed.js') ||
+  process.argv[1]?.endsWith('seed.ts')
+
+if (isDirectRun) {
+  runCli().catch((err) => {
+    console.error(err)
+    process.exit(1)
+  })
+}
