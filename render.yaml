@@ -1,32 +1,33 @@
 services:
   - type: web
     name: sistema-joice-backend
-    env: node
+    runtime: node
+    plan: free
     rootDir: backend
     buildCommand: |
       npm ci
       npm run build
       npx prisma generate
-    preDeployCommand: npx prisma migrate deploy
-    startCommand: npm run start
+    # migrate no start (preDeployCommand só existe em planos pagos)
+    startCommand: npx prisma migrate deploy && npm run start
     autoDeploy: true
-    disk:
-      name: backend-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: PORT
         value: 4000
+      # SQLite efêmero no plano free (sem Disk)
       - key: DATABASE_URL
-        value: file:/var/data/dev.db
+        value: file:/tmp/sistemajoice.db
       - key: JWT_SECRET
         generateValue: true
       - key: UPLOAD_DIR
-        value: /var/data/uploads
+        value: /tmp/uploads
+      - key: SEED_ON_START
+        value: "true"
 
   - type: web
     name: sistema-joice-frontend
     runtime: static
+    plan: free
     rootDir: frontend
     buildCommand: |
       npm ci
